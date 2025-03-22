@@ -5,7 +5,7 @@ import os
 import uvicorn
 from templates import TEMPLATES
 from app.services.scraper import SaunaScraper
-from app.models.database import init_db, get_sauna_ranking
+from app.models.database import init_db, get_sauna_ranking, reset_database
 
 # アプリケーションの初期化
 app = FastAPI(title="サウナ穴場チェッカー")
@@ -96,6 +96,27 @@ async def test_scraping():
         return {
             "status": "error",
             "message": f"スクレイピングテストに失敗しました: {str(e)}"
+        }
+
+@app.get("/api/reset")
+async def reset_db():
+    """データベースをリセットします（ランキングを初期化）"""
+    try:
+        result = await reset_database()
+        if result:
+            return {
+                "status": "success",
+                "message": "データベースが正常にリセットされました"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "データベースのリセットに失敗しました"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"エラーが発生しました: {str(e)}"
         }
 
 @app.on_event("startup")

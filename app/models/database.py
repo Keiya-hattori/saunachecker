@@ -236,4 +236,31 @@ async def get_latest_reviews(limit: int = 10, conn=None) -> list:
         return []
     finally:
         if close_conn and conn:
+            conn.close()
+
+async def reset_database(conn=None):
+    """データベースをリセットする"""
+    close_conn = False
+    try:
+        if conn is None:
+            conn = get_db()
+            close_conn = True
+        
+        cur = conn.cursor()
+        
+        # レビューテーブルを空にする
+        cur.execute("DELETE FROM reviews")
+        
+        # サウナ統計テーブルを空にする
+        cur.execute("DELETE FROM sauna_stats")
+        
+        conn.commit()
+        print("データベースをリセットしました")
+        return True
+    except Exception as e:
+        print(f"データベースリセット中にエラー発生: {str(e)}")
+        print(traceback.format_exc())
+        return False
+    finally:
+        if close_conn and conn:
             conn.close() 
