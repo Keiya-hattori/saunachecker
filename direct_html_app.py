@@ -4,7 +4,7 @@ import datetime
 import asyncio
 import os
 from app.services.scraper import SaunaScraper
-from app.models.database import init_db, save_review, get_sauna_ranking, get_review_count, get_latest_reviews, get_db
+from app.models.database import init_db, save_review, get_sauna_ranking, get_review_count, get_latest_reviews, get_db, reset_database
 import uvicorn
 import traceback
 from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status
@@ -207,6 +207,14 @@ async def root():
                         <button id="refresh-status" class="secondary">状態を更新</button>
                     </div>
                 </div>
+                
+                <div class="admin-panel" style="margin-top: 20px;">
+                    <h3>データベース管理</h3>
+                    <p>データベースをリセットすると、すべてのレビューデータとランキングが削除されます。この操作は元に戻せません。</p>
+                    <div class="panel-buttons">
+                        <button id="reset-database" class="danger">データベースをリセット</button>
+                    </div>
+                </div>
             </div>
             
             <script>
@@ -319,6 +327,30 @@ async def root():
                 
                 // 状態更新ボタンのイベントリスナー
                 document.getElementById('refresh-status').addEventListener('click', updateAdminPanel);
+                
+                // データベースリセットボタンのイベントリスナー
+                document.getElementById('reset-database').addEventListener('click', async () => {
+                    if (confirm('本当にデータベースをリセットしますか？すべてのレビューとランキングデータが削除されます。この操作は元に戻せません。')) {
+                        try {
+                            const response = await fetch('/api/reset_database', {
+                                method: 'POST'
+                            });
+                            
+                            const data = await response.json();
+                            if (data.status === 'success') {
+                                alert(data.message);
+                                // ランキング表示を更新（表示中の場合）
+                                if (document.getElementById('ranking-tab').classList.contains('active')) {
+                                    document.getElementById('get-ranking').click();
+                                }
+                            } else {
+                                alert(`エラー: ${data.message}`);
+                            }
+                        } catch (error) {
+                            alert(`エラー: ${error.message}`);
+                        }
+                    }
+                });
                 
                 // タブ切り替え機能
                 function showTab(tabName) {
@@ -708,6 +740,19 @@ async def toggle_auto_scraping_endpoint(toggle_data: ToggleAutoScraping, backgro
 @app.post("/api/reset_scraping")
 async def reset_scraping_endpoint():
     return await reset_scraping_state()
+
+@app.post("/api/reset_database")
+async def reset_database_endpoint():
+    """データベースをリセットするエンドポイント"""
+    try:
+        result = await reset_database()
+        if result:
+            return {"status": "success", "message": "データベースが正常にリセットされました"}
+        return {"status": "error", "message": "データベースのリセットに失敗しました"}
+    except Exception as e:
+        print(f"データベースリセット中にエラー: {str(e)}")
+        print(traceback.format_exc())
+        return {"status": "error", "message": f"エラーが発生しました: {str(e)}"}
 
 if __name__ == "__main__":
     # 環境変数からポート番号を取得するか、デフォルト値を使用
