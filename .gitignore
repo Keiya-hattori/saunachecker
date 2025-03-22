@@ -1,0 +1,29 @@
+# Python仮想環境
+venv/
+env/
+.venv/
+
+# キャッシュファイル
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# データベースファイル
+*.db
+*.sqlite
+*.sqlite3
+
+# ログファイル
+logs/
+*.log
+
+# 開発環境の設定ファイル
+.env
+.env.local
+.idea/
+.vscode/
+
+# OSのメタファイル
+.DS_Store
+Thumbs.db 
