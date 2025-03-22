@@ -3,7 +3,7 @@ services:
     name: saunachecker
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn direct_html_app:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ENVIRONMENT
         value: production
