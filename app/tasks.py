@@ -134,10 +134,10 @@ async def periodic_scraping():
             
             print(f"自動スクレイピング完了: {new_reviews_count}件のレビューを取得しました")
             print(f"ランキング更新: 総レビュー数 {total_reviews}件、総サウナ数 {len(ranking)}件")
-            print(f"次回のスクレイピングは30分後です（{start_page + 3}〜{end_page + 3}ページ）")
+            print(f"次回のスクレイピングは15分後です（{start_page + 3}〜{end_page + 3}ページ）")
             
-            # 30分間待機
-            await asyncio.sleep(30 * 60)  # 30分 = 1800秒
+            # 15分間待機
+            await asyncio.sleep(15 * 60)  # 15分 = 900秒
             
         except Exception as e:
             print(f"自動スクレイピング中にエラー発生: {str(e)}")

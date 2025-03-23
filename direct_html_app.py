@@ -162,7 +162,13 @@ async def root():
                         <span id="scraping-status">ステータス取得中...</span>
                     </div>
                 </div>
-                <div id="reviews-result" class="result-box">ボタンをクリックして更新してください</div>
+                <div id="latest-reviews" class="bg-white rounded-lg shadow-md p-6 mt-8">
+                    <h2 class="text-2xl font-bold mb-4">最新の穴場レビュー</h2>
+                    <div class="text-sm text-gray-500 mb-4">
+                        15分ごとに更新 - 最終更新: <span id="last-update">-</span>
+                    </div>
+                    <div id="reviews-result" class="result-box">ボタンをクリックして更新してください</div>
+                </div>
             </div>
             
             <div id="ranking-tab" class="tab-content">
@@ -509,7 +515,11 @@ async def root():
                                 rankingHtml += `
                                     <tr>
                                         <td>${index + 1}</td>
-                                        <td>${sauna.name}</td>
+                                        <td>
+                                            <a href="https://sauna-ikitai.com/saunas/${sauna.id}" target="_blank" class="text-blue-500 hover:underline">
+                                                ${sauna.name}
+                                            </a>
+                                        </td>
                                         <td>${sauna.review_count}</td>
                                         <td>${date}</td>
                                     </tr>
@@ -577,7 +587,11 @@ async def root():
                             html += `
                                 <tr>
                                     <td>${index + 1}</td>
-                                    <td>${sauna.name}</td>
+                                    <td>
+                                        <a href="https://sauna-ikitai.com/saunas/${sauna.id}" target="_blank" class="text-blue-500 hover:underline">
+                                            ${sauna.name}
+                                        </a>
+                                    </td>
                                     <td>${sauna.review_count}</td>
                                     <td>${date}</td>
                                 </tr>
@@ -638,7 +652,7 @@ async def get_hidden_gem_reviews():
 @app.get("/api/ranking")
 async def get_ranking():
     try:
-        ranking = await get_sauna_ranking(limit=20)
+        ranking = await get_sauna_ranking(limit=40)
         total_reviews = await get_review_count()
         return {
             "ranking": ranking,

@@ -62,7 +62,7 @@ async def test_scraping():
         }
 
 @router.get("/api/ranking")
-async def get_ranking(limit: int = 20):
+async def get_ranking(limit: int = 40):
     """データベースに基づいたサウナランキングを取得"""
     try:
         # データベースからランキングを取得
