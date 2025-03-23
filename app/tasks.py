@@ -96,8 +96,34 @@ async def periodic_scraping():
     """30分ごとに自動的にスクレイピングを実行するバックグラウンドタスク"""
     global last_scraping_time, scraping_state
     
+    # 起動時にデータベースの状態を確認
+    try:
+        if IS_RENDER:
+            data_dir = Path('/data')
+            if not data_dir.exists():
+                data_dir.mkdir(exist_ok=True)
+                print(f"バックグラウンドタスク: 永続データディレクトリを作成しました: {data_dir}")
+            
+            # データディレクトリ内のファイルを確認
+            files = list(data_dir.glob('*'))
+            print(f"バックグラウンドタスク: データディレクトリ内のファイル: {[f.name for f in files]}")
+            
+        # データベース接続テスト
+        db = get_db()
+        db.execute("SELECT COUNT(*) FROM sqlite_master")
+        print("バックグラウンドタスク: データベース接続テスト成功")
+    except Exception as e:
+        print(f"バックグラウンドタスク: データベース初期化エラー: {e}")
+        print(traceback.format_exc())
+    
     # 起動時にスクレイピング状態を読み込む
-    load_scraping_state()
+    try:
+        load_scraping_state()
+        print(f"バックグラウンドタスク: スクレイピング状態を読み込みました")
+        print(f"最終ページ: {scraping_state['last_page']}, 総スクレイピングページ数: {scraping_state['total_pages_scraped']}")
+    except Exception as e:
+        print(f"バックグラウンドタスク: スクレイピング状態の読み込みエラー: {e}")
+        print(traceback.format_exc())
     
     print(f"バックグラウンドスクレイピングタスクを開始しました。30分ごとに実行します。")
     print(f"自動スクレイピング有効: {scraping_state['auto_scraping_enabled']}")
@@ -120,6 +146,17 @@ async def periodic_scraping():
             # 現在時刻を取得
             now = datetime.now()
             
+            # データベース接続を再確認
+            try:
+                db = get_db()
+                db.execute("SELECT COUNT(*) FROM sqlite_master")
+                print("スクレイピング前のデータベース接続テスト: 成功")
+            except Exception as e:
+                print(f"スクレイピング前のデータベース接続エラー: {e}")
+                print(traceback.format_exc())
+                await asyncio.sleep(300)  # 5分待機して再試行
+                continue
+            
             # スクレイピングの実行
             print(f"自動スクレイピング開始: {now.strftime('%Y-%m-%d %H:%M:%S')}")
             
@@ -138,11 +175,15 @@ async def periodic_scraping():
             scraping_state['is_running'] = True
             save_scraping_state()
             
+            # スクレイピング実行
+            start_time = datetime.now()
             reviews = await scraper.get_hidden_gem_reviews(
                 max_pages=3,
                 start_page=start_page,
                 end_page=end_page
             )
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
             
             # スクレイピング状態を更新
             scraping_state['last_page'] = end_page
@@ -152,18 +193,22 @@ async def periodic_scraping():
             save_scraping_state()
             
             # 結果の取得と記録
-            ranking = await get_sauna_ranking(limit=20)
-            total_reviews = await get_review_count()
-            
-            # 前回からの新規レビュー数を計算
-            new_reviews_count = len(reviews)
-            
-            # 最終スクレイピング時刻を更新
-            last_scraping_time = now
-            
-            print(f"自動スクレイピング完了: {new_reviews_count}件のレビューを取得しました")
-            print(f"ランキング更新: 総レビュー数 {total_reviews}件、総サウナ数 {len(ranking)}件")
-            print(f"次回のスクレイピングは15分後です（{start_page + 3}〜{end_page + 3}ページ）")
+            try:
+                ranking = await get_sauna_ranking(limit=20)
+                total_reviews = await get_review_count()
+                
+                # 前回からの新規レビュー数を計算
+                new_reviews_count = len(reviews)
+                
+                # 最終スクレイピング時刻を更新
+                last_scraping_time = now
+                
+                print(f"自動スクレイピング完了: {new_reviews_count}件のレビューを取得しました（処理時間: {duration:.2f}秒）")
+                print(f"ランキング更新: 総レビュー数 {total_reviews}件、総サウナ数 {len(ranking)}件")
+                print(f"次回のスクレイピングは15分後です（{start_page + 3}〜{end_page + 3}ページ）")
+            except Exception as e:
+                print(f"スクレイピング後のデータ取得エラー: {e}")
+                print(traceback.format_exc())
             
             # 15分間待機
             await asyncio.sleep(15 * 60)  # 15分 = 900秒

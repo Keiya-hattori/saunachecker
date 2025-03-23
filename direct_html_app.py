@@ -9,6 +9,7 @@ import uvicorn
 import traceback
 from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status, scraping_state, save_scraping_state, load_scraping_state
 from pydantic import BaseModel
+from pathlib import Path
 
 app = FastAPI()
 scraper = SaunaScraper()
@@ -27,13 +28,41 @@ class ToggleAutoScraping(BaseModel):
 async def startup_event():
     """アプリケーション起動時にデータベースを初期化"""
     global background_task
-    db = get_db()
-    await init_db(db)
-    # テスト用データを挿入
-    # await insert_test_data()  # テストデータ挿入を無効化
+    
+    # Render環境の確認と永続データディレクトリの初期化
+    IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
+    if IS_RENDER:
+        data_dir = Path('/data')
+        try:
+            if not data_dir.exists():
+                data_dir.mkdir(exist_ok=True)
+                print(f"Render環境で永続データディレクトリを作成しました: {data_dir}")
+            else:
+                print(f"Render環境で永続データディレクトリを確認しました: {data_dir}")
+                
+            # データディレクトリ内のファイルを確認
+            files = list(data_dir.glob('*'))
+            print(f"データディレクトリ内のファイル: {[f.name for f in files]}")
+        except Exception as e:
+            print(f"Render環境での永続データディレクトリの初期化エラー: {e}")
+            print(traceback.format_exc())
+    
+    # データベースの初期化
+    try:
+        db = get_db()
+        await init_db(db)
+        print("データベースの初期化が完了しました")
+    except Exception as e:
+        print(f"データベース初期化エラー: {e}")
+        print(traceback.format_exc())
     
     # スクレイピング状態を読み込む
-    load_scraping_state()
+    try:
+        load_scraping_state()
+        print("スクレイピング状態の読み込みが完了しました")
+    except Exception as e:
+        print(f"スクレイピング状態読み込みエラー: {e}")
+        print(traceback.format_exc())
     
     if IS_PRODUCTION:
         # プロダクション環境でのみ自動スクレイピングを有効化（ただし即時実行はしない）
@@ -758,7 +787,37 @@ async def toggle_auto_scraping_endpoint(toggle_data: ToggleAutoScraping, backgro
 async def github_action_scraping():
     """GitHub Actionsから呼び出される定期実行用のエンドポイント"""
     try:
-        load_scraping_state()
+        # スクレイピング開始時刻
+        start_time = datetime.datetime.now()
+        print(f"GitHub Action スクレイピング開始時刻: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # データベースへの接続とデータベースディレクトリの確認
+        try:
+            if IS_RENDER:
+                data_dir = Path('/data')
+                if not data_dir.exists():
+                    data_dir.mkdir(exist_ok=True)
+                    print(f"Render環境でデータディレクトリを作成しました: {data_dir}")
+            
+            db = get_db()
+            db.execute("SELECT COUNT(*) FROM sqlite_master")  # 接続テスト
+            print("データベース接続テスト: 成功")
+        except Exception as e:
+            print(f"データベース接続エラー: {e}")
+            print(traceback.format_exc())
+            raise
+
+        # スクレイピング状態を読み込む
+        try:
+            load_scraping_state()
+            print(f"現在のスクレイピング状態: 最終ページ={scraping_state['last_page']}, 総ページ数={scraping_state['total_pages_scraped']}")
+        except Exception as e:
+            print(f"スクレイピング状態の読み込みエラー: {e}")
+            print(traceback.format_exc())
+            # エラー時は状態を初期化
+            scraping_state['last_page'] = 0
+            scraping_state['total_pages_scraped'] = 0
+            scraping_state['is_running'] = False
 
         start_page = scraping_state.get('last_page', 0) + 1
         end_page = start_page + 2  # 3ページずつ
@@ -784,20 +843,37 @@ async def github_action_scraping():
         scraping_state['is_running'] = False
         save_scraping_state()
 
-        print(f"GitHub Action スクレイピング完了: {len(reviews)}件のレビューを取得")
+        # スクレイピング終了時刻と処理時間
+        end_time = datetime.datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        print(f"GitHub Action スクレイピング完了: {len(reviews)}件のレビューを取得 (処理時間: {duration:.2f}秒)")
         print(f"次回スクレイピング予定: ページ範囲 {end_page + 1}〜{end_page + 3}")
+
+        # データベース内のレビュー数を確認
+        try:
+            total_reviews = await get_review_count()
+            print(f"データベース内の総レビュー数: {total_reviews}件")
+        except Exception as e:
+            print(f"レビュー数取得エラー: {e}")
+            total_reviews = "不明"
 
         return {
             "status": "success",
             "message": f"{len(reviews)}件のレビューを取得しました",
             "current_page_range": f"{start_page}〜{end_page}",
-            "next_page_range": f"{end_page + 1}〜{end_page + 3}"
+            "next_page_range": f"{end_page + 1}〜{end_page + 3}",
+            "total_reviews": total_reviews,
+            "processing_time": f"{duration:.2f}秒"
         }
     except Exception as e:
+        # エラー発生時は状態をリセット
         scraping_state['is_running'] = False
         save_scraping_state()
+        
         print("GitHub Action スクレイピング中にエラー:", str(e))
         print(traceback.format_exc())
+        
         return {
             "status": "error",
             "message": f"スクレイピングに失敗しました: {str(e)}"
