@@ -14,5 +14,5 @@ jobs:
       - name: Run scraping
         run: |
           # アプリのエンドポイントに対してリクエストを送信
-          curl -X GET "https://saunachecker.onrender.com/api/github-action-scraping"
+          curl -X GET "https://saunachecker.onrender.com/"
           echo "Scraping job completed" 
