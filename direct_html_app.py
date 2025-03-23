@@ -737,6 +737,52 @@ async def scraping_status():
 async def toggle_auto_scraping_endpoint(toggle_data: ToggleAutoScraping, background_tasks: BackgroundTasks):
     return await toggle_auto_scraping(toggle_data.enable, background_tasks)
 
+@app.get("/api/github-action-scraping")
+async def github_action_scraping():
+    """GitHub Actionsから呼び出される定期実行用のエンドポイント"""
+    try:
+        from app.tasks import load_scraping_state, scraping_state, save_scraping_state
+        load_scraping_state()
+
+        start_page = scraping_state.get('last_page', 0) + 1
+        end_page = start_page + 2  # 3ページずつ
+
+        if start_page <= 0:
+            start_page = 1
+            end_page = 3
+
+        scraping_state['is_running'] = True
+        save_scraping_state()
+
+        reviews = await scraper.get_hidden_gem_reviews(
+            max_pages=3,
+            start_page=start_page,
+            end_page=end_page
+        )
+
+        scraping_state['last_page'] = end_page
+        scraping_state['last_run'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        scraping_state['total_pages_scraped'] = scraping_state.get('total_pages_scraped', 0) + (end_page - start_page + 1)
+        scraping_state['is_running'] = False
+        save_scraping_state()
+
+        return {
+            "status": "success",
+            "message": f"{len(reviews)}件のレビューを取得しました",
+            "current_page_range": f"{start_page}〜{end_page}",
+            "next_page_range": f"{end_page + 1}〜{end_page + 3}"
+        }
+    except Exception as e:
+        import traceback
+        scraping_state['is_running'] = False
+        save_scraping_state()
+        print("GitHub Action スクレイピング中にエラー:", str(e))
+        print(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": f"スクレイピングに失敗しました: {str(e)}"
+        }
+
 @app.post("/api/reset_scraping")
 async def reset_scraping_endpoint():
     return await reset_scraping_state()
