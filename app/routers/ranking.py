@@ -1,7 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.services.scraper import SaunaScraper
 from app.config import HIDDEN_GEM_KEYWORDS
-from app.models.database import get_sauna_ranking, get_review_count
+from app.models.database import get_sauna_ranking, get_review_count, get_db_session, SaunaStats, Review, reset_database
+import os
+from pathlib import Path
+import json
+from bs4 import BeautifulSoup
 
 router = APIRouter()
 scraper = SaunaScraper()
@@ -81,4 +85,19 @@ async def get_ranking(limit: int = 20):
         return {
             "status": "error",
             "message": str(e)
+        }
+
+@router.post("/api/reset")
+async def reset_data():
+    """全てのデータベースレコードをリセットする"""
+    try:
+        reset_database()
+        return {
+            "status": "success",
+            "message": "データベースをリセットしました。全てのレビューとランキングデータが削除されました。"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"データベースリセット中にエラーが発生しました: {str(e)}"
         } 

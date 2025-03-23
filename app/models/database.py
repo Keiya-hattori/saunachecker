@@ -11,6 +11,10 @@ def get_db():
     conn.row_factory = sqlite3.Row  # 辞書形式で結果を取得
     return conn
 
+def get_db_session():
+    """データベース接続を取得（get_dbのエイリアス）"""
+    return get_db()
+
 async def init_db(conn=None):
     """データベースの初期化"""
     try:
@@ -36,7 +40,8 @@ async def init_db(conn=None):
             sauna_name TEXT,
             review_count INTEGER DEFAULT 0,
             score REAL DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            crowdedness_status TEXT DEFAULT NULL
         )
         ''')
         
@@ -51,6 +56,53 @@ async def init_db(conn=None):
     finally:
         if conn is not None and conn != get_db():
             conn.close()
+
+# DBモデルの定義
+class Review:
+    """レビューモデル"""
+    def __init__(self, review_id, sauna_name, review_text, created_at=None):
+        self.review_id = review_id
+        self.sauna_name = sauna_name
+        self.review_text = review_text
+        self.created_at = created_at or datetime.now()
+
+class SaunaStats:
+    """サウナ統計モデル"""
+    def __init__(self, sauna_id, sauna_name, review_count=0, score=0, last_updated=None, crowdedness_status=None):
+        self.sauna_id = sauna_id
+        self.sauna_name = sauna_name
+        self.review_count = review_count
+        self.score = score
+        self.last_updated = last_updated or datetime.now()
+        self.crowdedness_status = crowdedness_status
+        
+    def save(self):
+        """サウナ統計を保存（更新）"""
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            
+            # 既存のレコードを更新
+            cur.execute('''
+                UPDATE sauna_stats 
+                SET review_count = ?, score = ?, last_updated = ?, crowdedness_status = ?
+                WHERE sauna_id = ?
+            ''', (
+                self.review_count, 
+                self.score, 
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                self.crowdedness_status,
+                self.sauna_id
+            ))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"サウナ統計更新中にエラー: {str(e)}")
+            return False
+        finally:
+            if conn:
+                conn.close()
 
 async def save_review(conn_or_review_id, sauna_name=None, review_text=None, sauna_url=None) -> bool:
     """レビューをデータベースに保存
@@ -133,38 +185,44 @@ async def save_review(conn_or_review_id, sauna_name=None, review_text=None, saun
             conn.close()
 
 async def get_sauna_ranking(limit: int = 20, conn=None) -> list:
-    """サウナのランキングを取得"""
+    """サウナランキングを取得"""
     close_conn = False
     try:
-        if not DATABASE_PATH.exists():
-            print("データベースが存在しないため初期化します")
-            await init_db()
-            return []
-        
         if conn is None:
             conn = get_db()
             close_conn = True
         
         cur = conn.cursor()
         
-        # レビュー数の多い順にサウナを取得
-        cur.execute("""
-        SELECT sauna_id, sauna_name, review_count, last_updated
-        FROM sauna_stats
-        ORDER BY review_count DESC, last_updated DESC
-        LIMIT ?
-        """, (limit,))
+        # レビュー数が多い順にサウナをランキング
+        cur.execute('''
+            SELECT 
+                sauna_id, 
+                sauna_name, 
+                review_count, 
+                score,
+                last_updated,
+                crowdedness_status
+            FROM sauna_stats 
+            ORDER BY review_count DESC, score DESC
+            LIMIT ?
+        ''', (limit,))
         
-        results = []
-        for row in cur.fetchall():
-            results.append({
-                "sauna_id": row["sauna_id"],
-                "name": row["sauna_name"],
-                "review_count": row["review_count"],
-                "last_updated": row["last_updated"]
+        rows = cur.fetchall()
+        
+        # 辞書のリストに変換
+        result = []
+        for row in rows:
+            result.append({
+                'sauna_id': row['sauna_id'],
+                'name': row['sauna_name'],
+                'review_count': row['review_count'],
+                'score': row['score'],
+                'last_updated': row['last_updated'],
+                'crowdedness_status': row['crowdedness_status']
             })
         
-        return results
+        return result
     except Exception as e:
         print(f"ランキング取得中にエラー発生: {str(e)}")
         print(traceback.format_exc())
@@ -261,6 +319,49 @@ async def reset_database(conn=None):
         print(f"データベースリセット中にエラー発生: {str(e)}")
         print(traceback.format_exc())
         return False
+    finally:
+        if close_conn and conn:
+            conn.close()
+
+async def get_sauna_stats_by_name(sauna_name, conn=None) -> SaunaStats:
+    """サウナ名から統計情報を取得"""
+    close_conn = False
+    try:
+        if conn is None:
+            conn = get_db()
+            close_conn = True
+        
+        cur = conn.cursor()
+        
+        # サウナ名で検索
+        cur.execute('''
+            SELECT * FROM sauna_stats WHERE sauna_name = ?
+        ''', (sauna_name,))
+        
+        row = cur.fetchone()
+        
+        if row:
+            # サウナ統計オブジェクトを作成して返す
+            try:
+                # 存在するか確認して値を取得しようとする
+                crowdedness_status = row['crowdedness_status']
+            except (KeyError, IndexError):
+                # キーが存在しない場合はNoneを設定
+                crowdedness_status = None
+                
+            return SaunaStats(
+                sauna_id=row['sauna_id'],
+                sauna_name=row['sauna_name'],
+                review_count=row['review_count'],
+                score=row['score'],
+                last_updated=row['last_updated'],
+                crowdedness_status=crowdedness_status
+            )
+        return None
+    except Exception as e:
+        print(f"サウナ統計取得中にエラー: {str(e)}")
+        print(traceback.format_exc())
+        return None
     finally:
         if close_conn and conn:
             conn.close() 

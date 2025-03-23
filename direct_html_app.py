@@ -8,10 +8,16 @@ from app.models.database import init_db, save_review, get_sauna_ranking, get_rev
 import uvicorn
 import traceback
 from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status
+from app.routers import ranking, analyzer, crowdedness
 from pydantic import BaseModel
 
 app = FastAPI()
 scraper = SaunaScraper()
+
+# ルーターを登録
+app.include_router(ranking.router)
+app.include_router(analyzer.router)
+app.include_router(crowdedness.router)
 
 # バックグラウンドタスクの参照を保持するための変数
 background_task = None
@@ -332,17 +338,18 @@ async def root():
                 document.getElementById('reset-database').addEventListener('click', async () => {
                     if (confirm('本当にデータベースをリセットしますか？すべてのレビューとランキングデータが削除されます。この操作は元に戻せません。')) {
                         try {
-                            const response = await fetch('/api/reset_database', {
+                            const response = await fetch('/api/reset', {
                                 method: 'POST'
                             });
                             
                             const data = await response.json();
                             if (data.status === 'success') {
                                 alert(data.message);
-                                // ランキング表示を更新（表示中の場合）
-                                if (document.getElementById('ranking-tab').classList.contains('active')) {
-                                    document.getElementById('get-ranking').click();
-                                }
+                                // ランキングとレビュー表示をクリア
+                                document.getElementById('ranking-list').innerHTML = '';
+                                document.getElementById('reviews-container').innerHTML = '';
+                                // 管理パネルを更新
+                                await updateAdminPanel();
                             } else {
                                 alert(`エラー: ${data.message}`);
                             }
@@ -499,6 +506,7 @@ async def root():
                                             <th>サウナ名</th>
                                             <th>レビュー数</th>
                                             <th>最終更新</th>
+                                            <th>混雑度</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -512,6 +520,16 @@ async def root():
                                         <td>${sauna.name}</td>
                                         <td>${sauna.review_count}</td>
                                         <td>${date}</td>
+                                        <td>
+                                            <button 
+                                                class="check-crowdedness-btn bg-blue-500 text-white px-2 py-1 rounded text-xs" 
+                                                data-sauna-name="${sauna.name}"
+                                                data-status="${sauna.crowdedness_status || ''}"
+                                                onclick="checkCrowdedness('${sauna.name}')"
+                                                ${sauna.crowdedness_status === 'NotFound' ? 'disabled style="background-color: #ccc;"' : ''}>
+                                                ${sauna.crowdedness_status === 'NotFound' ? '混雑度取得不可' : '混雑度確認'}
+                                            </button>
+                                        </td>
                                     </tr>
                                 `;
                             });
@@ -567,6 +585,7 @@ async def root():
                                         <th>サウナ名</th>
                                         <th>レビュー数</th>
                                         <th>最終更新</th>
+                                        <th>混雑度</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -580,6 +599,16 @@ async def root():
                                     <td>${sauna.name}</td>
                                     <td>${sauna.review_count}</td>
                                     <td>${date}</td>
+                                    <td>
+                                        <button 
+                                            class="check-crowdedness-btn bg-blue-500 text-white px-2 py-1 rounded text-xs" 
+                                            data-sauna-name="${sauna.name}"
+                                            data-status="${sauna.crowdedness_status || ''}"
+                                            onclick="checkCrowdedness('${sauna.name}')"
+                                            ${sauna.crowdedness_status === 'NotFound' ? 'disabled style="background-color: #ccc;"' : ''}>
+                                            ${sauna.crowdedness_status === 'NotFound' ? '混雑度取得不可' : '混雑度確認'}
+                                        </button>
+                                    </td>
                                 </tr>
                             `;
                         });
@@ -594,6 +623,141 @@ async def root():
                         resultDiv.innerHTML = `<p style="color: red">エラー: ${error.message}</p>`;
                     }
                 });
+                
+                // 混雑度を確認する関数
+                async function checkCrowdedness(saunaName) {
+                    try {
+                        // ボタンを押したときに、同じボタンを「取得中...」に変更
+                        const buttons = document.querySelectorAll(`.check-crowdedness-btn[data-sauna-name="${saunaName}"]`);
+                        
+                        // ステータスをチェック（既にNotFoundが設定されている場合はAPIを呼ばない）
+                        const firstButton = buttons[0];
+                        if (firstButton && firstButton.dataset.status === 'NotFound') {
+                            alert('このサウナの混雑度情報はGoogle Mapに表示されていません。');
+                            return;
+                        }
+                        
+                        buttons.forEach(btn => {
+                            btn.textContent = '取得中...';
+                            btn.disabled = true;
+                        });
+                        
+                        // 混雑度情報を取得
+                        const response = await fetch(`/api/crowdedness?sauna_name=${encodeURIComponent(saunaName)}`);
+                        const data = await response.json();
+                        
+                        if (data.status === 'error') {
+                            alert(`エラー: ${data.message}`);
+                            buttons.forEach(btn => {
+                                btn.textContent = '混雑度確認';
+                                btn.disabled = false;
+                            });
+                            return;
+                        }
+                        
+                        // 結果表示用のモーダルダイアログを表示
+                        const crowdData = data.crowdedness;
+                        const statusClass = getCrowdStatusClass(crowdData.current_percentage);
+                        const modalHTML = `
+                            <div class="modal-overlay" onclick="closeModal()" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+                                <div class="modal-content" onclick="event.stopPropagation()" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; max-width: 500px; width: 90%; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1001;">
+                                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                        <h2 style="margin: 0; font-size: 1.5em;">${saunaName} の混雑情報</h2>
+                                        <span onclick="closeModal()" style="cursor: pointer; font-size: 1.5em;">&times;</span>
+                                    </div>
+                                    <div class="modal-body">
+                                        ${crowdData.status === 'NotFound' ? `
+                                            <div style="text-align: center; padding: 20px;">
+                                                <p style="font-size: 1.2em; color: #777;">${crowdData.message || 'こちらのサウナの混雑度はGoogle Mapに表記されていません'}</p>
+                                                <p style="margin-top: 10px;">
+                                                    <a href="${crowdData.maps_url}" target="_blank" style="color: #4285F4; text-decoration: none;">
+                                                        Google Maps で確認する
+                                                    </a>
+                                                </p>
+                                            </div>
+                                        ` : `
+                                            <div style="text-align: center; margin-bottom: 20px;">
+                                                <div class="${statusClass}" style="font-size: 1.2em; font-weight: bold; margin-bottom: 10px;">
+                                                    ${crowdData.status}
+                                                </div>
+                                                <div class="crowd-percentage" style="display: flex; justify-content: space-around; margin: 20px 0;">
+                                                    <div>
+                                                        <div style="font-size: 2em; font-weight: bold;">${crowdData.current_percentage}%</div>
+                                                        <div style="color: #666;">現在の混雑度</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style="font-size: 2em; font-weight: bold;">${crowdData.usual_percentage}%</div>
+                                                        <div style="color: #666;">通常の混雑度</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style="font-size: 0.8em; color: #888; margin-top: 10px;">
+                                                ${crowdData.note ? `<p>${crowdData.note}</p>` : ''}
+                                                <p>取得時刻: ${crowdData.timestamp}</p>
+                                                <p>
+                                                    <a href="${crowdData.maps_url}" target="_blank" style="color: #4285F4; text-decoration: none;">
+                                                        Google Maps で確認する
+                                                    </a>
+                                                </p>
+                                            </div>
+                                        `}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // モーダルをDOMに追加
+                        const modalContainer = document.createElement('div');
+                        modalContainer.id = 'crowd-modal';
+                        modalContainer.innerHTML = modalHTML;
+                        document.body.appendChild(modalContainer);
+                        
+                        // ボタンを元に戻す
+                        buttons.forEach(btn => {
+                            if (crowdData.status === 'NotFound') {
+                                btn.textContent = '混雑度取得不可';
+                                btn.style.backgroundColor = '#ccc';
+                                btn.disabled = true;
+                                btn.dataset.status = 'NotFound';
+                            } else {
+                                btn.textContent = '混雑度確認';
+                                btn.disabled = false;
+                            }
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('混雑度情報の取得中にエラーが発生しました');
+                        
+                        // エラー時もボタンを元に戻す
+                        const buttons = document.querySelectorAll(`.check-crowdedness-btn[data-sauna-name="${saunaName}"]`);
+                        buttons.forEach(btn => {
+                            btn.textContent = '混雑度確認';
+                            btn.disabled = false;
+                        });
+                    }
+                }
+                
+                // モーダルを閉じる関数
+                function closeModal() {
+                    const modal = document.getElementById('crowd-modal');
+                    if (modal) {
+                        modal.remove();
+                    }
+                }
+                
+                // 混雑度に応じたCSSクラスを返す関数
+                function getCrowdStatusClass(percentage) {
+                    if (percentage < 30) {
+                        return 'text-green-600 bg-green-200';
+                    } else if (percentage < 60) {
+                        return 'text-yellow-600 bg-yellow-200';
+                    } else if (percentage < 80) {
+                        return 'text-orange-600 bg-orange-200';
+                    } else {
+                        return 'text-red-600 bg-red-200';
+                    }
+                }
             </script>
         </body>
     </html>
