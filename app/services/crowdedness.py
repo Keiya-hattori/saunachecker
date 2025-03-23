@@ -60,6 +60,18 @@ class CrowdednessService:
         try:
             logger.info("Seleniumの設定を開始します")
             
+            # Renderの環境変数をチェック
+            is_render = os.environ.get('RENDER', 'False') == 'True'
+            
+            logger.info(f"環境: {'Render' if is_render else 'ローカル'}")
+            
+            # Render環境では常にブラウザをNoneに設定（モックデータを使用）
+            if is_render:
+                logger.info("Render環境では現在Chromeが利用できないため、モックデータを使用します")
+                self.browser = None
+                return
+                
+            # 以下はローカル環境のみで実行
             # Chromeのオプション設定
             chrome_options = Options()
             chrome_options.add_argument("--headless")  # ヘッドレスモードで実行
@@ -70,43 +82,18 @@ class CrowdednessService:
             chrome_options.add_argument(f"user-agent={self.headers['User-Agent']}")
             chrome_options.add_argument("--lang=ja")  # 日本語設定
             
-            # Renderの環境変数をチェック
-            is_render = os.environ.get('RENDER', 'False') == 'True'
-            
-            logger.info(f"環境: {'Render' if is_render else 'ローカル'}")
             logger.info("Chrome options設定完了")
             
             try:
-                # webdriver-managerを使用してChromeDriverを自動でインストール
-                if is_render:
-                    # Render環境用の設定
-                    chromium_path = os.environ.get('CHROMIUM_PATH', '/usr/bin/chromium')
-                    chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
-                    
-                    logger.info(f"Render環境のChromium パス: {chromium_path}")
-                    logger.info(f"Render環境のChromeDriver パス: {chromedriver_path}")
-                    
-                    # Chrome実行可能ファイルのパスを設定
-                    chrome_options.binary_location = chromium_path
-                    
-                    # ChromeDriverのサービスを設定
-                    if os.path.exists(chromedriver_path):
-                        service = Service(executable_path=chromedriver_path)
-                        logger.info(f"Render環境のChromeDriverを使用: {chromedriver_path}")
-                    else:
-                        # 既定のパスにない場合はwebdriver-managerを使用
-                        service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
-                        logger.info("webdriver-managerを使用してChromeDriverをインストールしました")
+                # ローカル環境用の設定
+                chromedriver_path = self._get_chromedriver_path()
+                if not chromedriver_path:
+                    # 手動インストールに失敗した場合、webdriver-managerを試す
+                    service = Service(ChromeDriverManager().install())
+                    logger.info("webdriver-managerを使用してChromeDriverをインストールしました")
                 else:
-                    # ローカル環境用の設定
-                    chromedriver_path = self._get_chromedriver_path()
-                    if not chromedriver_path:
-                        # 手動インストールに失敗した場合、webdriver-managerを試す
-                        service = Service(ChromeDriverManager().install())
-                        logger.info("webdriver-managerを使用してChromeDriverをインストールしました")
-                    else:
-                        service = Service(executable_path=chromedriver_path)
-                        logger.info(f"ローカルのChromeDriverを使用: {chromedriver_path}")
+                    service = Service(executable_path=chromedriver_path)
+                    logger.info(f"ローカルのChromeDriverを使用: {chromedriver_path}")
                 
                 # ブラウザインスタンスを作成
                 logger.info("webdriver.Chrome初期化開始")
@@ -437,8 +424,20 @@ class CrowdednessService:
         encoded_query = urllib.parse.quote(sauna_name)
         maps_url = f"https://www.google.com/maps/search/{encoded_query}"
         
-        logger.info(f"サウナ名 {sauna_name} の模擬データを生成します")
-        return self._generate_mock_data_sync(maps_url)
+        # Render環境かチェック
+        is_render = os.environ.get('RENDER', 'False') == 'True'
+        
+        if is_render:
+            logger.info(f"Render環境でのモックデータを生成します: {sauna_name}")
+            # Render環境ではメッセージを変更
+            note = "Render環境では現在混雑度の取得が制限されています。近日中にアップデート予定です。"
+        else:
+            logger.info(f"サウナ名 {sauna_name} の模擬データを生成します")
+            note = "模擬データです"
+        
+        result = self._generate_mock_data_sync(maps_url)
+        result["note"] = note
+        return result
     
     def _get_crowd_status(self, percentage):
         """混雑度のパーセンテージからステータスを判定"""
