@@ -30,7 +30,7 @@ async def startup_event():
     db = get_db()
     await init_db(db)
     # テスト用データを挿入
-    await insert_test_data()
+    # await insert_test_data()  # テストデータ挿入を無効化
     
     if IS_PRODUCTION:
         # プロダクション環境でのみ自動スクレイピングを有効化（ただし即時実行はしない）
