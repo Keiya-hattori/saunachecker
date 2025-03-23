@@ -10,6 +10,7 @@ import traceback
 from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status, scraping_state, save_scraping_state, load_scraping_state
 from pydantic import BaseModel
 from pathlib import Path
+from app.services.ranking import generate_sauna_ranking as generate_json_ranking, get_review_count as get_json_review_count
 
 # 環境変数
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
@@ -158,10 +159,18 @@ async def root():
                 .badge-danger { background-color: #dc3545; color: white; }
                 .badge-warning { background-color: #ffc107; color: black; }
                 .badge-info { background-color: #17a2b8; color: white; }
+                .json-links { margin-top: 15px; padding: 10px; background-color: #e8f4f8; border-radius: 5px; }
+                .json-links a { color: #0066ff; text-decoration: none; margin-right: 15px; }
+                .json-links a:hover { text-decoration: underline; }
             </style>
         </head>
         <body>
             <h1>サウナ穴場チェッカー</h1>
+            
+            <div class="json-links">
+                <strong>新機能：</strong>
+                <a href="/json_ranking">JSON保存データベースからのランキングを見る</a>
+            </div>
             
             <div class="tab-buttons">
                 <button class="tab-button active" onclick="showTab('check')">穴場チェック</button>
@@ -895,6 +904,244 @@ async def reset_database_endpoint():
         print(f"データベースリセット中にエラー: {str(e)}")
         print(traceback.format_exc())
         return {"status": "error", "message": f"エラーが発生しました: {str(e)}"}
+
+@app.get("/api/json_ranking")
+async def get_json_ranking():
+    """JSONファイルからランキングを取得するエンドポイント"""
+    try:
+        ranking = await generate_json_ranking(limit=40)
+        total_reviews = await get_json_review_count()
+        return {
+            "ranking": ranking,
+            "total_reviews": total_reviews,
+            "total_saunas": len(ranking)
+        }
+    except Exception as e:
+        print(f"JSONランキング取得中にエラー: {str(e)}")
+        print(traceback.format_exc())
+        return {"error": str(e)}
+
+@app.get("/json_ranking", response_class=HTMLResponse)
+async def json_ranking_page():
+    """JSONファイルベースのランキングページ"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>サウナ穴場ランキング（JSON版）</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .score-badge {
+                font-size: 1.2em;
+                font-weight: bold;
+                padding: 3px 8px;
+                border-radius: 4px;
+            }
+            .high-score {
+                background-color: #2ecc71;
+                color: white;
+            }
+            .medium-score {
+                background-color: #f39c12;
+                color: white;
+            }
+            .low-score {
+                background-color: #e74c3c;
+                color: white;
+            }
+            .ranking-item {
+                border-bottom: 1px solid #ccc;
+                padding: 15px 0;
+            }
+            .ranking-item:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .sauna-name {
+                font-size: 1.2em;
+                font-weight: bold;
+            }
+            .review-count {
+                color: #666;
+            }
+            .keyword-tag {
+                display: inline-block;
+                background-color: #e0f7fa;
+                color: #0097a7;
+                font-size: 0.8em;
+                padding: 2px 6px;
+                border-radius: 3px;
+                margin-right: 5px;
+                margin-bottom: 5px;
+            }
+            .review-text {
+                border-left: 3px solid #ccc;
+                padding-left: 10px;
+                margin-top: 10px;
+                font-size: 0.9em;
+                color: #555;
+            }
+            header {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            h1 {
+                color: #333;
+            }
+            .description {
+                color: #666;
+                margin-bottom: 10px;
+            }
+            .stats {
+                font-size: 0.8em;
+                color: #888;
+            }
+            nav {
+                display: flex;
+                justify-content: center;
+                margin-bottom: 20px;
+            }
+            .link {
+                margin: 0 10px;
+                color: #2196F3;
+                text-decoration: none;
+            }
+            .link:hover {
+                text-decoration: underline;
+            }
+            .update-time {
+                text-align: right;
+                font-size: 0.8em;
+                color: #888;
+                margin-top: 5px;
+            }
+            .rank-number {
+                font-size: 1.5em;
+                font-weight: bold;
+                color: #aaa;
+                margin-right: 10px;
+                min-width: 30px;
+                text-align: center;
+            }
+            button {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 15px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            button:hover {
+                background-color: #0b7dda;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>サウナ穴場ランキング（JSON版）</h1>
+            <p class="description">GitHubに保存されたJSONデータからの穴場ランキング</p>
+            <p class="stats"><span id="review-count">-</span>件のレビューから生成 | <span id="sauna-count">-</span>軒のサウナがランクイン</p>
+        </header>
+        
+        <nav>
+            <a href="/" class="link">トップページへ戻る</a>
+            <button id="refresh-ranking">ランキングを更新</button>
+        </nav>
+        
+        <div id="update-time" class="update-time">最終更新: -</div>
+        
+        <div id="ranking-list">
+            <p>ランキングを読み込んでいます...</p>
+        </div>
+        
+        <script>
+            async function loadRanking() {
+                const rankingList = document.getElementById('ranking-list');
+                rankingList.innerHTML = '<p>ランキングを読み込んでいます...</p>';
+                
+                try {
+                    const response = await fetch('/api/json_ranking');
+                    if (!response.ok) {
+                        throw new Error(`サーバーエラー: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        rankingList.innerHTML = `<p style="color: red">エラー: ${data.error}</p>`;
+                        return;
+                    }
+                    
+                    if (!data.ranking || data.ranking.length === 0) {
+                        rankingList.innerHTML = '<p>ランキングデータはまだありません</p>';
+                        return;
+                    }
+                    
+                    // 統計情報の更新
+                    document.getElementById('review-count').textContent = data.total_reviews;
+                    document.getElementById('sauna-count').textContent = data.total_saunas;
+                    document.getElementById('update-time').textContent = 
+                        `最終更新: ${new Date().toLocaleString()}`;
+                    
+                    // ランキングの表示
+                    let html = '';
+                    data.ranking.forEach((sauna, index) => {
+                        const scoreClass = sauna.keyword_score > 5 ? 'high-score' : 
+                                        sauna.keyword_score > 2 ? 'medium-score' : 'low-score';
+                        
+                        html += `
+                            <div class="ranking-item">
+                                <div style="display: flex; align-items: center;">
+                                    <div class="rank-number">${index + 1}</div>
+                                    <div>
+                                        <div class="sauna-name">
+                                            ${sauna.name}
+                                            ${sauna.url ? `<a href="${sauna.url}" target="_blank" style="font-size: 0.8em; margin-left: 5px;">詳細</a>` : ''}
+                                        </div>
+                                        <div style="margin: 5px 0;">
+                                            <span class="review-count">レビュー: ${sauna.review_count}件</span>
+                                            <span style="margin-left: 10px;">穴場キーワード: ${sauna.keyword_count}個</span>
+                                            <span class="score-badge ${scoreClass}" style="margin-left: 10px;">スコア: ${sauna.keyword_score}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                ${sauna.keywords && sauna.keywords.length > 0 ? `
+                                <div style="margin-top: 10px;">
+                                    ${sauna.keywords.map(keyword => `<span class="keyword-tag">${keyword}</span>`).join('')}
+                                </div>` : ''}
+                                
+                                ${sauna.reviews && sauna.reviews.length > 0 ? `
+                                <div class="review-text">
+                                    ${sauna.reviews[0].substring(0, 200)}${sauna.reviews[0].length > 200 ? '...' : ''}
+                                </div>` : ''}
+                            </div>
+                        `;
+                    });
+                    
+                    rankingList.innerHTML = html;
+                    
+                } catch (error) {
+                    console.error('エラー:', error);
+                    rankingList.innerHTML = `<p style="color: red">エラーが発生しました: ${error.message}</p>`;
+                }
+            }
+            
+            // 更新ボタンのイベントリスナー
+            document.getElementById('refresh-ranking').addEventListener('click', loadRanking);
+            
+            // ページ読み込み時に実行
+            document.addEventListener('DOMContentLoaded', loadRanking);
+        </script>
+    </body>
+    </html>
+    """
 
 if __name__ == "__main__":
     # 環境変数からポート番号を取得するか、デフォルト値を使用

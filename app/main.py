@@ -4,8 +4,14 @@ import uvicorn
 from pathlib import Path
 from app.services.scraper import SaunaScraper
 import json
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="サウナ穴場チェッカー")
+
+# テンプレートとスタティックファイルの設定
+templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # スクレイパーのインスタンスを作成
 scraper = SaunaScraper()
@@ -51,6 +57,9 @@ async def home():
             <header class="text-center mb-12">
                 <h1 class="text-4xl font-bold text-gray-800 mb-4">サウナ穴場チェッカー</h1>
                 <p class="text-gray-600">サウナイキタイのレビューから穴場度を分析します</p>
+                <div class="mt-4">
+                    <a href="/json_ranking" class="text-blue-500 hover:text-blue-700 underline">穴場サウナランキングを見る →</a>
+                </div>
             </header>
 
             <div class="bg-white rounded-lg shadow-md p-6 mb-8">
