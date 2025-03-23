@@ -11,14 +11,15 @@ from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scr
 from pydantic import BaseModel
 from pathlib import Path
 
+# 環境変数
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
+IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
+
 app = FastAPI()
 scraper = SaunaScraper()
 
 # バックグラウンドタスクの参照を保持するための変数
 background_task = None
-
-# 環境変数からプロダクション環境かどうかを判断
-IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 # リクエストボディのモデル
 class ToggleAutoScraping(BaseModel):
@@ -30,7 +31,6 @@ async def startup_event():
     global background_task
     
     # Render環境の確認と永続データディレクトリの初期化
-    IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
     if IS_RENDER:
         data_dir = Path('/data')
         try:
