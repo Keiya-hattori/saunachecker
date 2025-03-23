@@ -119,6 +119,66 @@ async def reset_db():
             "message": f"エラーが発生しました: {str(e)}"
         }
 
+@app.get("/api/github-action-scraping")
+async def github_action_scraping():
+    """GitHub Actionsから呼び出される定期実行用のエンドポイント"""
+    try:
+        # スクレイパーインスタンスを作成
+        scraper = SaunaScraper()
+
+        # 前回のスクレイピング状態を確認
+        from app.tasks import load_scraping_state, scraping_state, save_scraping_state
+        load_scraping_state()
+        
+        # 今回スクレイピングするページ範囲を決定
+        start_page = scraping_state.get('last_page', 0) + 1
+        end_page = start_page + 2  # 3ページずつスクレイピング
+        
+        # ページ範囲が1から始まるようにする
+        if start_page <= 0:
+            start_page = 1
+            end_page = 3
+            
+        # スクレイピング実行
+        scraping_state['is_running'] = True
+        save_scraping_state()
+        
+        reviews = await scraper.get_hidden_gem_reviews(
+            max_pages=3,
+            start_page=start_page,
+            end_page=end_page
+        )
+        
+        # スクレイピング状態を更新
+        scraping_state['last_page'] = end_page
+        import datetime
+        now = datetime.datetime.now()
+        scraping_state['last_run'] = now.strftime('%Y-%m-%d %H:%M:%S')
+        scraping_state['total_pages_scraped'] = scraping_state.get('total_pages_scraped', 0) + (end_page - start_page + 1)
+        scraping_state['is_running'] = False
+        save_scraping_state()
+        
+        return {
+            "status": "success",
+            "message": f"{len(reviews)}件のレビューを取得しました",
+            "current_page_range": f"{start_page}〜{end_page}",
+            "next_page_range": f"{end_page + 1}〜{end_page + 3}"
+        }
+    except Exception as e:
+        import traceback
+        print(f"GitHub Action スクレイピング中にエラー: {str(e)}")
+        print(traceback.format_exc())
+        
+        # エラー時も状態を更新
+        from app.tasks import scraping_state, save_scraping_state
+        scraping_state['is_running'] = False
+        save_scraping_state()
+        
+        return {
+            "status": "error",
+            "message": f"スクレイピングに失敗しました: {str(e)}"
+        }
+
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時に実行される処理"""

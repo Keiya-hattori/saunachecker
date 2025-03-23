@@ -33,11 +33,11 @@ async def startup_event():
     await insert_test_data()
     
     if IS_PRODUCTION:
-        # プロダクション環境でのみ自動スクレイピングを開始
+        # プロダクション環境でのみ自動スクレイピングを有効化（ただし即時実行はしない）
         print("プロダクション環境で実行中: 自動スクレイピングが有効化されます")
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(start_periodic_scraping)
-        await start_periodic_scraping()
+        # 自動スクレイピングを有効化するだけで、即時実行はしない
+        scraping_state["auto_scraping_enabled"] = True
+        save_scraping_state()
     else:
         print("開発環境で実行中: 自動スクレイピングは無効化されています")
 
