@@ -18,6 +18,16 @@ import os
 import platform
 import sys
 import traceback
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
+
+# Render上での注意事項:
+# 1. ChromeとChromedriverをインストールするためのbuild commandを追加する必要があります
+#    例: apt-get update && apt-get install -y chromium-driver chromium
+# 2. 環境変数RENDER=Trueを設定してこのスクリプトにRender環境であることを伝える
+# 3. Chrome関連のパスを設定する環境変数:
+#    CHROMIUM_PATH=/usr/bin/chromium
+#    CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # ロギングの設定
 logging.basicConfig(
@@ -60,33 +70,55 @@ class CrowdednessService:
             chrome_options.add_argument(f"user-agent={self.headers['User-Agent']}")
             chrome_options.add_argument("--lang=ja")  # 日本語設定
             
+            # Renderの環境変数をチェック
+            is_render = os.environ.get('RENDER', 'False') == 'True'
+            
+            logger.info(f"環境: {'Render' if is_render else 'ローカル'}")
             logger.info("Chrome options設定完了")
             
-            # ChromeDriverの存在確認とダウンロードパスの設定
-            chromedriver_path = self._get_chromedriver_path()
-            
-            if chromedriver_path:
-                logger.info(f"ChromeDriverパス: {chromedriver_path}")
-                
-                # ファイルが存在するか再確認
-                if not os.path.exists(chromedriver_path):
-                    logger.error(f"指定されたパスにChromeDriverが存在しません: {chromedriver_path}")
-                    self.browser = None
-                    return
+            try:
+                # webdriver-managerを使用してChromeDriverを自動でインストール
+                if is_render:
+                    # Render環境用の設定
+                    chromium_path = os.environ.get('CHROMIUM_PATH', '/usr/bin/chromium')
+                    chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
                     
-                logger.info("ChromeDriverのService作成開始")
-                service = Service(executable_path=chromedriver_path)
+                    logger.info(f"Render環境のChromium パス: {chromium_path}")
+                    logger.info(f"Render環境のChromeDriver パス: {chromedriver_path}")
+                    
+                    # Chrome実行可能ファイルのパスを設定
+                    chrome_options.binary_location = chromium_path
+                    
+                    # ChromeDriverのサービスを設定
+                    if os.path.exists(chromedriver_path):
+                        service = Service(executable_path=chromedriver_path)
+                        logger.info(f"Render環境のChromeDriverを使用: {chromedriver_path}")
+                    else:
+                        # 既定のパスにない場合はwebdriver-managerを使用
+                        service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+                        logger.info("webdriver-managerを使用してChromeDriverをインストールしました")
+                else:
+                    # ローカル環境用の設定
+                    chromedriver_path = self._get_chromedriver_path()
+                    if not chromedriver_path:
+                        # 手動インストールに失敗した場合、webdriver-managerを試す
+                        service = Service(ChromeDriverManager().install())
+                        logger.info("webdriver-managerを使用してChromeDriverをインストールしました")
+                    else:
+                        service = Service(executable_path=chromedriver_path)
+                        logger.info(f"ローカルのChromeDriverを使用: {chromedriver_path}")
                 
+                # ブラウザインスタンスを作成
                 logger.info("webdriver.Chrome初期化開始")
                 self.browser = webdriver.Chrome(service=service, options=chrome_options)
                 logger.info("Seleniumの設定が完了しました。ブラウザインスタンスを作成しました。")
-            else:
-                logger.error("ChromeDriverが見つかりませんでした")
+            except Exception as e:
+                logger.error(f"ChromeDriverのインストールに失敗しました: {str(e)}")
+                logger.error(traceback.format_exc())
                 self.browser = None
         except Exception as e:
             logger.error(f"Seleniumの設定中にエラーが発生しました: {str(e)}")
             # スタックトレースも出力
-            import traceback
             logger.error(traceback.format_exc())
             # フォールバックとしてブラウザはNoneのままにする
             self.browser = None

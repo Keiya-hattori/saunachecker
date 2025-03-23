@@ -26,4 +26,7 @@ logs/
 
 # OSのメタファイル
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# デバッグファイル
+debug_*.html 
