@@ -15,8 +15,8 @@ IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # データ保存ディレクトリ
 if IS_RENDER:
-    # Render環境ではプロジェクトのルートディレクトリを使用
-    DATA_DIR = Path('/opt/render/project/src/data')
+    # Render環境では一時ディレクトリを使用
+    DATA_DIR = Path('/tmp/data')
 else:
     # ローカル環境ではプロジェクトディレクトリを使用
     DATA_DIR = Path('data')

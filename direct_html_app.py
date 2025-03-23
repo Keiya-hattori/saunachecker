@@ -33,19 +33,19 @@ async def startup_event():
     
     # Render環境の確認と永続データディレクトリの初期化
     if IS_RENDER:
-        data_dir = Path('/data')
+        data_dir = Path('/tmp')
         try:
             if not data_dir.exists():
                 data_dir.mkdir(exist_ok=True)
-                print(f"Render環境で永続データディレクトリを作成しました: {data_dir}")
+                print(f"Render環境で一時データディレクトリを作成しました: {data_dir}")
             else:
-                print(f"Render環境で永続データディレクトリを確認しました: {data_dir}")
+                print(f"Render環境で一時データディレクトリを確認しました: {data_dir}")
                 
             # データディレクトリ内のファイルを確認
             files = list(data_dir.glob('*'))
             print(f"データディレクトリ内のファイル: {[f.name for f in files]}")
         except Exception as e:
-            print(f"Render環境での永続データディレクトリの初期化エラー: {e}")
+            print(f"Render環境での一時データディレクトリの初期化エラー: {e}")
             print(traceback.format_exc())
     
     # データベースの初期化
@@ -803,10 +803,10 @@ async def github_action_scraping():
         # データベースへの接続とデータベースディレクトリの確認
         try:
             if IS_RENDER:
-                data_dir = Path('/data')
+                data_dir = Path('/tmp')
                 if not data_dir.exists():
                     data_dir.mkdir(exist_ok=True)
-                    print(f"Render環境でデータディレクトリを作成しました: {data_dir}")
+                    print(f"Render環境で一時データディレクトリを作成しました: {data_dir}")
             
             db = get_db()
             db.execute("SELECT COUNT(*) FROM sqlite_master")  # 接続テスト
