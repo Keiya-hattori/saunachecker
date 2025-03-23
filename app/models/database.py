@@ -5,26 +5,18 @@ import traceback
 import os
 import sys
 
-# データベースパスの設定: Render環境では永続ディレクトリを使用
-# Renderでは/data/ディレクトリが永続的に保持される
+# データベースパスの設定
 IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # データベースディレクトリの設定
 if IS_RENDER:
-    # Render環境では/data/ディレクトリにデータベースを保存
-    DATA_DIR = Path('/data')
-    try:
-        if not DATA_DIR.exists():
-            DATA_DIR.mkdir(exist_ok=True)
-            print(f"永続データディレクトリを作成しました: {DATA_DIR}")
-    except Exception as e:
-        print(f"永続データディレクトリの作成に失敗しました: {e}")
-        print(traceback.format_exc())
-        # 致命的なエラーなので終了
-        sys.exit(1)
+    # Render環境ではプロジェクトディレクトリ内にデータベースを一時的に保存
+    # フリープランでは永続ディレクトリは使用しない
+    DATA_DIR = Path('/opt/render/project/src')
+    print(f"Render環境でのデータディレクトリ: {DATA_DIR}")
     
-    DATABASE_PATH = DATA_DIR / 'sauna.db'
-    print(f"Render環境でのデータベースパス: {DATABASE_PATH.absolute()}")
+    DATABASE_PATH = DATA_DIR / 'sauna_temp.db'
+    print(f"Render環境での一時データベースパス: {DATABASE_PATH.absolute()}")
 else:
     # ローカル環境ではプロジェクトディレクトリにデータベースを保存
     DATABASE_PATH = Path('sauna.db')
@@ -33,11 +25,6 @@ else:
 def get_db():
     """データベース接続を取得"""
     try:
-        # データベースディレクトリが存在することを確認
-        if IS_RENDER and not DATA_DIR.exists():
-            DATA_DIR.mkdir(exist_ok=True)
-            print(f"データベースディレクトリを作成しました: {DATA_DIR}")
-        
         conn = sqlite3.connect(DATABASE_PATH)
         conn.row_factory = sqlite3.Row  # 辞書形式で結果を取得
         return conn
@@ -51,11 +38,6 @@ def get_db():
 async def init_db(conn=None):
     """データベースの初期化"""
     try:
-        # データベースディレクトリが存在することを確認
-        if IS_RENDER and not DATA_DIR.exists():
-            DATA_DIR.mkdir(exist_ok=True)
-            print(f"データベースディレクトリを作成しました: {DATA_DIR}")
-        
         if conn is None:
             conn = get_db()
         
