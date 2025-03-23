@@ -7,7 +7,7 @@ from app.services.scraper import SaunaScraper
 from app.models.database import init_db, save_review, get_sauna_ranking, get_review_count, get_latest_reviews, get_db, reset_database
 import uvicorn
 import traceback
-from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status
+from app.tasks import periodic_scraping, get_last_scraping_info, toggle_auto_scraping, reset_scraping_state, start_periodic_scraping, get_scraping_status, scraping_state, save_scraping_state, load_scraping_state
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -31,6 +31,9 @@ async def startup_event():
     await init_db(db)
     # テスト用データを挿入
     # await insert_test_data()  # テストデータ挿入を無効化
+    
+    # スクレイピング状態を読み込む
+    load_scraping_state()
     
     if IS_PRODUCTION:
         # プロダクション環境でのみ自動スクレイピングを有効化（ただし即時実行はしない）
@@ -755,7 +758,6 @@ async def toggle_auto_scraping_endpoint(toggle_data: ToggleAutoScraping, backgro
 async def github_action_scraping():
     """GitHub Actionsから呼び出される定期実行用のエンドポイント"""
     try:
-        from app.tasks import load_scraping_state, scraping_state, save_scraping_state
         load_scraping_state()
 
         start_page = scraping_state.get('last_page', 0) + 1
@@ -787,7 +789,6 @@ async def github_action_scraping():
             "next_page_range": f"{end_page + 1}〜{end_page + 3}"
         }
     except Exception as e:
-        import traceback
         scraping_state['is_running'] = False
         save_scraping_state()
         print("GitHub Action スクレイピング中にエラー:", str(e))
