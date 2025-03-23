@@ -767,6 +767,7 @@ async def github_action_scraping():
             start_page = 1
             end_page = 3
 
+        print(f"GitHub Action スクレイピング開始: ページ範囲 {start_page}〜{end_page}")
         scraping_state['is_running'] = True
         save_scraping_state()
 
@@ -776,11 +777,15 @@ async def github_action_scraping():
             end_page=end_page
         )
 
+        # スクレイピング状態を更新
         scraping_state['last_page'] = end_page
         scraping_state['last_run'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         scraping_state['total_pages_scraped'] = scraping_state.get('total_pages_scraped', 0) + (end_page - start_page + 1)
         scraping_state['is_running'] = False
         save_scraping_state()
+
+        print(f"GitHub Action スクレイピング完了: {len(reviews)}件のレビューを取得")
+        print(f"次回スクレイピング予定: ページ範囲 {end_page + 1}〜{end_page + 3}")
 
         return {
             "status": "success",

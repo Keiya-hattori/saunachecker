@@ -45,6 +45,7 @@ def load_scraping_state():
     global scraping_state
     try:
         if SCRAPING_STATE_FILE.exists():
+            print(f"スクレイピング状態ファイルをロード中: {SCRAPING_STATE_FILE}")
             with open(SCRAPING_STATE_FILE, 'r', encoding='utf-8') as f:
                 loaded_state = json.load(f)
                 # 必要なキーが全て含まれているか確認
@@ -59,20 +60,37 @@ def load_scraping_state():
                     print(f"スクレイピング状態を読み込みました: 最終ページ {scraping_state['last_page']}")
                 else:
                     print("状態ファイルのフォーマットが不正です。デフォルト値を使用します。")
+                    # 初期状態を保存
+                    save_scraping_state()
         else:
-            print("スクレイピング状態ファイルが見つかりません。初期状態を使用します。")
+            print(f"スクレイピング状態ファイルが見つかりません: {SCRAPING_STATE_FILE}")
+            print("初期状態を使用します。")
             save_scraping_state()
     except Exception as e:
         print(f"状態ファイルの読み込みエラー: {e}")
+        print(traceback.format_exc())
+        print("エラーにより初期状態を使用します。")
+        save_scraping_state()
 
 def save_scraping_state():
     """スクレイピング状態をファイルに保存する"""
     try:
+        # Render環境では/dataディレクトリを確認
+        if IS_RENDER:
+            if not DATA_DIR.exists():
+                DATA_DIR.mkdir(exist_ok=True)
+                print(f"Render環境で/dataディレクトリを作成しました")
+        
+        # ディレクトリが確実に存在することを確認
+        SCRAPING_STATE_FILE.parent.mkdir(exist_ok=True)
+        
         with open(SCRAPING_STATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(scraping_state, f, ensure_ascii=False, indent=2)
         print(f"スクレイピング状態を保存しました: 最終ページ {scraping_state['last_page']}")
+        print(f"保存先: {SCRAPING_STATE_FILE}")
     except Exception as e:
         print(f"状態ファイルの保存エラー: {e}")
+        print(traceback.format_exc())
 
 async def periodic_scraping():
     """30分ごとに自動的にスクレイピングを実行するバックグラウンドタスク"""
