@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Run scraping
         run: |
-          # アプリのエンドポイントに対してリクエストを送信
-          curl -X GET "https://saunachecker.onrender.com/api/github-action-scraping"
-          echo "Scraping job completed" 
+          echo "スクレイピングを開始します: $(date)"
+          # タイムアウトを60秒に設定し、詳細な出力を有効化
+          response=$(curl -X GET "https://saunachecker.onrender.com/api/github-action-scraping" -m 60 -v)
+          echo "レスポンス: $response"
+          echo "スクレイピングが完了しました: $(date)" 
