@@ -2,8 +2,21 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 import traceback
+import os
 
-DATABASE_PATH = Path('sauna.db')
+# データベースパスの設定: Render環境では永続ディレクトリを使用
+# Renderでは/data/ディレクトリが永続的に保持される
+IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
+
+if IS_RENDER:
+    # Render環境では/data/ディレクトリにデータベースを保存
+    DATA_DIR = Path('/data')
+    if not DATA_DIR.exists():
+        DATA_DIR.mkdir(exist_ok=True)
+    DATABASE_PATH = DATA_DIR / 'sauna.db'
+else:
+    # ローカル環境ではプロジェクトディレクトリにデータベースを保存
+    DATABASE_PATH = Path('sauna.db')
 
 def get_db():
     """データベース接続を取得"""

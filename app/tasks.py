@@ -17,8 +17,19 @@ scraper = SaunaScraper()
 # 前回のスクレイピング時刻を記録する変数
 last_scraping_time = None
 
+# Render環境かどうかを確認
+IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
+
 # スクレイピング状態を保存するファイルパス
-SCRAPING_STATE_FILE = Path('scraping_state.json')
+if IS_RENDER:
+    # Render環境では/data/ディレクトリに状態ファイルを保存
+    DATA_DIR = Path('/data')
+    if not DATA_DIR.exists():
+        DATA_DIR.mkdir(exist_ok=True)
+    SCRAPING_STATE_FILE = DATA_DIR / 'scraping_state.json'
+else:
+    # ローカル環境ではプロジェクトディレクトリに状態ファイルを保存
+    SCRAPING_STATE_FILE = Path('scraping_state.json')
 
 # 初期状態
 scraping_state = {
