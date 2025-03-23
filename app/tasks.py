@@ -22,22 +22,23 @@ IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # スクレイピング状態を保存するファイルパス
 if IS_RENDER:
-    # Render環境では/data/ディレクトリに状態ファイルを保存
-    DATA_DIR = Path('/data')
-    if not DATA_DIR.exists():
-        DATA_DIR.mkdir(exist_ok=True)
+    # Render環境ではプロジェクトディレクトリに状態ファイルを保存
+    DATA_DIR = Path('/opt/render/project/src')
     SCRAPING_STATE_FILE = DATA_DIR / 'scraping_state.json'
+    print(f"Render環境での状態ファイル: {SCRAPING_STATE_FILE}")
 else:
     # ローカル環境ではプロジェクトディレクトリに状態ファイルを保存
+    DATA_DIR = Path('.')
     SCRAPING_STATE_FILE = Path('scraping_state.json')
+    print(f"ローカル環境での状態ファイル: {SCRAPING_STATE_FILE}")
 
-# 初期状態
+# スクレイピングの状態管理用の辞書
 scraping_state = {
-    "last_page": 0,
-    "last_run": None,
-    "total_pages_scraped": 0,
-    "is_running": False,
-    "auto_scraping_enabled": False
+    "last_page": 0,  # 最後にスクレイピングしたページ
+    "total_pages_scraped": 0,  # スクレイピングした総ページ数
+    "last_run": None,  # 最後に実行した時刻
+    "is_running": False,  # 現在実行中かどうか
+    "auto_scraping_enabled": False  # 自動スクレイピングが有効かどうか
 }
 
 def load_scraping_state():
@@ -99,10 +100,11 @@ async def periodic_scraping():
     # 起動時にデータベースの状態を確認
     try:
         if IS_RENDER:
-            data_dir = Path('/data')
+            # Render環境では書き込み可能な一時ディレクトリを使用
+            data_dir = Path('/tmp')
             if not data_dir.exists():
                 data_dir.mkdir(exist_ok=True)
-                print(f"バックグラウンドタスク: 永続データディレクトリを作成しました: {data_dir}")
+                print(f"バックグラウンドタスク: 一時データディレクトリを作成しました: {data_dir}")
             
             # データディレクトリ内のファイルを確認
             files = list(data_dir.glob('*'))
