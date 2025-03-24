@@ -33,19 +33,19 @@ async def startup_event():
     
     # Render環境の確認と永続データディレクトリの初期化
     if IS_RENDER:
-        data_dir = Path('/tmp')
+        data_dir = Path('/opt/render/project/src/data')
         try:
             if not data_dir.exists():
                 data_dir.mkdir(exist_ok=True)
-                print(f"Render環境で一時データディレクトリを作成しました: {data_dir}")
+                print(f"Render環境で永続データディレクトリを作成しました: {data_dir}")
             else:
-                print(f"Render環境で一時データディレクトリを確認しました: {data_dir}")
+                print(f"Render環境で永続データディレクトリを確認しました: {data_dir}")
                 
             # データディレクトリ内のファイルを確認
             files = list(data_dir.glob('*'))
             print(f"データディレクトリ内のファイル: {[f.name for f in files]}")
         except Exception as e:
-            print(f"Render環境での一時データディレクトリの初期化エラー: {e}")
+            print(f"Render環境での永続データディレクトリの初期化エラー: {e}")
             print(traceback.format_exc())
     
     # データベースの初期化
@@ -65,14 +65,8 @@ async def startup_event():
         print(f"スクレイピング状態読み込みエラー: {e}")
         print(traceback.format_exc())
     
-    if IS_PRODUCTION:
-        # プロダクション環境でのみ自動スクレイピングを有効化（ただし即時実行はしない）
-        print("プロダクション環境で実行中: 自動スクレイピングが有効化されます")
-        # 自動スクレイピングを有効化するだけで、即時実行はしない
-        scraping_state["auto_scraping_enabled"] = True
-        save_scraping_state()
-    else:
-        print("開発環境で実行中: 自動スクレイピングは無効化されています")
+    # GitHub Actionsによるスクレイピングを使用するため、内部的な自動スクレイピングは無効化
+    print("GitHub Actionsによるスクレイピングを使用します")
 
 @app.on_event("shutdown")
 async def shutdown_event():
