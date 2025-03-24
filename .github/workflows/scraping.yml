@@ -4,17 +4,26 @@ on:
   schedule:
     # 15分ごとに実行（UTCタイムゾーン）
     - cron: '*/15 * * * *'
-  # 手動実行も可能に
   workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake up Render app
+        run: |
+          echo "Renderアプリを起こします: $(date)"
+          curl --retry 3 --retry-delay 5 https://saunachecker.onrender.com -m 30 -v
+          echo "Renderアプリのウォームアップ完了: $(date)"
+
+      - name: Wait for app to fully wake up
+        run: |
+          echo "数秒待機してRenderの起動を待ちます"
+          sleep 20
+
       - name: Run scraping
         run: |
           echo "スクレイピングを開始します: $(date)"
-          # タイムアウトを60秒に設定し、詳細な出力を有効化
           response=$(curl -X GET "https://saunachecker.onrender.com/api/github-action-scraping" -m 60 -v)
           echo "レスポンス: $response"
-          echo "スクレイピングが完了しました: $(date)" 
+          echo "スクレイピングが完了しました: $(date)"
