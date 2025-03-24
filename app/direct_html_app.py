@@ -152,7 +152,9 @@ async def home():
                 <h1 class="text-4xl font-bold text-gray-800 mb-4">サウナ穴場チェッカー</h1>
                 <p class="text-gray-600">サウナイキタイのレビューから穴場度を分析します</p>
                 <div class="mt-4">
-                    <a href="/debug" class="text-blue-500 hover:text-blue-700 underline">デバッグ情報を見る →</a>
+                    <a href="/debug" class="text-blue-500 hover:text-blue-700 underline">デバッグ情報を見る</a>
+                    <span class="mx-2">|</span>
+                    <a href="/json_ranking" class="text-blue-500 hover:text-blue-700 underline">穴場サウナランキングを見る →</a>
                 </div>
             </header>
 
