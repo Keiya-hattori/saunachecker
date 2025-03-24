@@ -44,7 +44,7 @@ async def root(request: Request):
     # データベースからランキング情報を取得
     try:
         # JSONランキングを生成
-        ranking_data = await generate_json_ranking(limit=20)
+        ranking_data = await generate_json_ranking(limit=40)
         review_count = await get_json_review_count()
     except Exception as e:
         print(f"ランキングデータ生成中にエラー発生: {str(e)}")
