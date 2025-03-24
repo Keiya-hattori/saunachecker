@@ -200,74 +200,99 @@ class SaunaScraper:
     async def get_hidden_gem_reviews_test(self):
         """レビューから穴場サウナを見つける（機能2）"""
         try:
-            hidden_gem_reviews = []
+            # テストモードを終了し、実際のWebスクレイピングを実行
+            print("実際のWebサイトからレビューデータを取得します...")
             
-            # テスト用HTMLファイルを読み込む
-            for test_file in TEST_HTML_PATHS:
-                test_path = Path(test_file)
-                print(f"処理対象ファイル: {test_path}")
-                print(f"ファイルの存在確認: {test_path.exists()}")
+            # 東京都のサウナ一覧ページからスクレイピング
+            base_url = "https://sauna-ikitai.com/search/saunas?prefecture%5B%5D=13"
+            
+            # 実際のスクレイピングを実行（1〜2ページ目）
+            real_reviews = await self.get_hidden_gem_reviews(base_url=base_url, max_pages=2)
+            
+            if real_reviews and len(real_reviews) > 0:
+                print(f"Webサイトから{len(real_reviews)}件のレビューを取得しました")
                 
-                if test_path.exists():
-                    print(f"テストファイル {test_path} を読み込みます")
+                # キーワードを含むレビューだけをフィルタリング
+                hidden_gem_reviews = []
+                for review in real_reviews:
+                    keywords = review.get("keywords", [])
+                    if keywords:
+                        hidden_gem_reviews.append({
+                            "name": review.get("name", "不明な施設"),
+                            "url": review.get("url", ""),
+                            "review": review.get("review", ""),
+                            "keywords": keywords
+                        })
+                
+                # キーワードを含むレビューがない場合は通常のレビューを返す
+                if not hidden_gem_reviews:
+                    print("穴場キーワードを含むレビューが見つからなかったため通常のレビューを表示します")
+                    for i, review in enumerate(real_reviews[:5]):
+                        hidden_gem_reviews.append({
+                            "name": review.get("name", "不明な施設"),
+                            "url": review.get("url", ""),
+                            "review": review.get("review", ""),
+                            "keywords": []
+                        })
+                
+                print(f"合計{len(hidden_gem_reviews)}件のレビューを返します")
+                return hidden_gem_reviews
+            else:
+                print("Webサイトからレビューを取得できませんでした。テストデータを使用します。")
+                
+                # Webサイトからデータを取得できなかった場合のみ、テストデータ使用
+                hidden_gem_reviews = []
+                
+                # テスト用HTMLファイルを読み込む
+                for test_file in TEST_HTML_PATHS:
+                    test_path = Path(test_file)
+                    print(f"処理対象ファイル: {test_path}")
+                    print(f"ファイルの存在確認: {test_path.exists()}")
                     
-                    # HTMLファイルを読み込む
-                    with open(test_path, "r", encoding="utf-8") as f:
-                        html = f.read()
-                        print(f"HTMLファイルの長さ: {len(html)} 文字")
-                    
-                    soup = BeautifulSoup(html, 'html.parser')
-                    
-                    # レビューの取得（投稿カードを取得）
-                    review_elements = soup.select('div.p-postCard')
-                    print(f"レビュー要素数: {len(review_elements)}")
-                    
-                    for i, review in enumerate(review_elements):
-                        try:
-                            print(f"\nレビュー {i+1} の処理開始")
-                            # サウナ施設情報の取得（リンクを探す）
-                            facility_link = review.select_one('strong.p-postCard_facility a')
-                            
-                            if facility_link:
-                                sauna_name = facility_link.text.strip()
-                                sauna_url = facility_link.get('href', '')
-                                print(f"サウナ施設名: {sauna_name}")
+                    if test_path.exists():
+                        print(f"テストファイル {test_path} を読み込みます")
+                        
+                        # HTMLファイルを読み込む
+                        with open(test_path, "r", encoding="utf-8") as f:
+                            html = f.read()
+                            print(f"HTMLファイルの長さ: {len(html)} 文字")
+                        
+                        soup = BeautifulSoup(html, 'html.parser')
+                        
+                        # レビューの取得（投稿カードを取得）
+                        review_elements = soup.select('div.p-postCard')
+                        print(f"レビュー要素数: {len(review_elements)}")
+                        
+                        # 最初の5件だけ処理
+                        for i, review in enumerate(review_elements[:5]):
+                            try:
+                                # サウナ施設情報の取得（リンクを探す）
+                                facility_link = review.select_one('strong.p-postCard_facility a')
                                 
-                                if not sauna_url.startswith('http'):
-                                    sauna_url = f"{self.base_url}{sauna_url}"
-                                
-                                # レビューテキストの取得
-                                review_text_elem = review.select_one('p.p-postCard_text')
-                                if review_text_elem:
-                                    # 改行を適切に処理
-                                    review_text = ''
-                                    for element in review_text_elem.contents:
-                                        if isinstance(element, str):
-                                            review_text += element.strip()
-                                        elif element.name == 'br':
-                                            review_text += '\n'
+                                if facility_link:
+                                    sauna_name = facility_link.text.strip()
+                                    sauna_url = facility_link.get('href', '')
                                     
-                                    review_text = review_text.strip()
-                                    print(f"レビューテキスト（先頭100文字）: {review_text[:100]}")
+                                    if not sauna_url.startswith('http'):
+                                        sauna_url = f"{self.base_url}{sauna_url}"
                                     
-                                    # キーワードチェック - 大文字小文字を区別しない
-                                    found_keywords = []
-                                    for keyword in HIDDEN_GEM_KEYWORDS.keys():
-                                        if keyword in review_text:
-                                            found_keywords.append(keyword)
-                                            print(f"キーワード「{keyword}」を発見")
-                                    
-                                    # キーワードが見つからない場合でもレビューを返す（デバッグ用）
-                                    if True or len(found_keywords) > 0:
-                                        print(f"レビューを追加: {sauna_name}")
-                                        # ユニークなレビューIDを生成
-                                        review_id = f"{sauna_url.split('/')[-1]}_{len(hidden_gem_reviews)}"
+                                    # レビューテキストの取得
+                                    review_text_elem = review.select_one('p.p-postCard_text')
+                                    if review_text_elem:
+                                        review_text = ''
+                                        for element in review_text_elem.contents:
+                                            if isinstance(element, str):
+                                                review_text += element.strip()
+                                            elif element.name == 'br':
+                                                review_text += '\n'
                                         
-                                        # データベースに保存 - エラーが発生してもレビューは返す
-                                        try:
-                                            await save_review(review_id, sauna_name, review_text)
-                                        except Exception as e:
-                                            print(f"レビュー保存中にエラー: {str(e)}")
+                                        review_text = review_text.strip()
+                                        
+                                        # キーワード検出
+                                        found_keywords = []
+                                        for keyword in HIDDEN_GEM_KEYWORDS.keys():
+                                            if keyword in review_text:
+                                                found_keywords.append(keyword)
                                         
                                         hidden_gem_reviews.append({
                                             "name": sauna_name,
@@ -275,21 +300,14 @@ class SaunaScraper:
                                             "review": review_text,
                                             "keywords": found_keywords
                                         })
-                                else:
-                                    print("レビューテキストが見つかりません")
-                            else:
-                                print("サウナ施設リンクが見つかりません")
-                        except Exception as e:
-                            print(f"個別レビューの処理中にエラー: {str(e)}")
-                            print(traceback.format_exc())
-                            continue
-                else:
-                    print(f"テストファイル {test_path} が見つかりません")
-            
-            print(f"合計 {len(hidden_gem_reviews)} 件のレビューを取得しました")
-            return hidden_gem_reviews
+                            except Exception as e:
+                                print(f"レビュー処理中にエラー: {str(e)}")
+                                continue
+                
+                return hidden_gem_reviews
+                
         except Exception as e:
-            print(f"テスト実行中にエラーが発生: {e}")
+            print(f"レビュー取得中にエラーが発生: {str(e)}")
             print(f"エラーの詳細:\n{traceback.format_exc()}")
             return []
 

@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 import uvicorn
+import asyncio
 
 from app.models.database import get_db, init_db
 from app.database import save_reviews, update_ratings
@@ -213,8 +214,9 @@ async def startup_event():
     
     # データベースの初期化
     try:
-        await init_db()
-        print("データベースの初期化が完了しました")
+        db_initialized = await init_db()
+        if db_initialized:
+            print("データベースの初期化が完了しました")
         
         # 初期化ステータスを表示
         db = get_db()
@@ -226,8 +228,28 @@ async def startup_event():
         try:
             count = db.execute("SELECT COUNT(*) FROM reviews").fetchone()
             print(f"Found {count[0]} reviews in database")
+            
+            # レビューが少ない場合、初期スクレイピングを実行
+            if count[0] < 10:
+                print("レビュー数が少ないため、初期スクレイピングを実行します...")
+                try:
+                    # バックグラウンドで非同期実行
+                    asyncio.create_task(periodic_scraping())
+                    print("初期スクレイピングタスクが開始されました")
+                except Exception as e:
+                    print(f"初期スクレイピングの開始中にエラー: {str(e)}")
+                    print(traceback.format_exc())
+            
         except Exception as e:
             print(f"Reviews table may not exist yet: {str(e)}")
+            # テーブルがまだない場合も初期スクレイピングを実行
+            try:
+                print("テーブルがまだないため、初期スクレイピングを実行します...")
+                asyncio.create_task(periodic_scraping())
+                print("初期スクレイピングタスクが開始されました")
+            except Exception as e:
+                print(f"初期スクレイピングの開始中にエラー: {str(e)}")
+                print(traceback.format_exc())
         
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
@@ -249,7 +271,7 @@ async def json_ranking(request: Request):
     """サウナランキングを表示"""
     try:
         # JSONランキングを生成
-        ranking_data = await generate_json_ranking(limit=20)
+        ranking_data = await generate_json_ranking(limit=40)
         review_count = await get_json_review_count()
         
         return templates.TemplateResponse(
