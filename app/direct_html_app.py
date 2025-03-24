@@ -12,7 +12,7 @@ import uvicorn
 from app.models.database import get_db, init_db
 from app.database import save_reviews, update_ratings
 from app.tasks import toggle_auto_scraping, periodic_scraping, reset_scraping_state, load_scraping_state
-from app.services.scraper import SaunaScraper, transform_reviews
+from app.services.scraper import SaunaScraper
 from app.services.ranking import generate_sauna_ranking as generate_json_ranking, get_review_count as get_json_review_count
 
 # 環境変数
