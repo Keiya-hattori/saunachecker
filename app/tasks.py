@@ -80,7 +80,7 @@ def save_scraping_state():
         if IS_RENDER:
             if not DATA_DIR.exists():
                 DATA_DIR.mkdir(exist_ok=True)
-                print(f"Render環境で/dataディレクトリを作成しました")
+                print(f"Render環境でデータディレクトリを作成しました：{DATA_DIR}")
         
         # ディレクトリが確実に存在することを確認
         SCRAPING_STATE_FILE.parent.mkdir(exist_ok=True)

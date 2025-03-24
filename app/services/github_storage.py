@@ -15,8 +15,9 @@ IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # データ保存ディレクトリ
 if IS_RENDER:
-    # Render環境では一時ディレクトリを使用
-    DATA_DIR = Path('/tmp/data')
+    # Render環境ではプロジェクトのルートディレクトリを使用
+    # /tmpではなく/opt/render/project/srcを使用して永続化
+    DATA_DIR = Path('/opt/render/project/src/data')
 else:
     # ローカル環境ではプロジェクトディレクトリを使用
     DATA_DIR = Path('data')
@@ -38,9 +39,11 @@ def ensure_data_dirs():
     except Exception as e:
         print(f"データディレクトリの作成エラー: {e}")
         print(traceback.format_exc())
-        # エラーが発生しても処理を続行するため、一時的なディレクトリを返す
+        # エラーが発生した場合でも代替のディレクトリを使用
         if IS_RENDER:
-            return Path('/tmp')
+            alt_dir = Path('/opt/render/project/src/tmp_data')
+            alt_dir.mkdir(exist_ok=True)
+            return alt_dir
         else:
             return Path('.')
 
@@ -77,16 +80,19 @@ def save_reviews_to_json(reviews, batch_name=None):
         print(f"JSONファイル保存エラー: {e}")
         print(traceback.format_exc())
         
-        # Render環境では一時ディレクトリに保存を試みる
+        # Render環境では代替のパスを使用
         if IS_RENDER:
             try:
-                tmp_path = Path('/tmp') / f"temp_reviews_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                with open(tmp_path, 'w', encoding='utf-8') as f:
+                # Render環境では/opt/render/project/srcディレクトリに保存
+                persist_dir = Path('/opt/render/project/src/data/scraping')
+                persist_dir.mkdir(parents=True, exist_ok=True)
+                persist_path = persist_dir / f"backup_reviews_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(persist_path, 'w', encoding='utf-8') as f:
                     json.dump(reviews, f, ensure_ascii=False, indent=2)
-                print(f"一時ディレクトリにレビューデータを保存しました: {tmp_path}")
-                return tmp_path
+                print(f"永続ディレクトリにレビューデータを保存しました: {persist_path}")
+                return persist_path
             except Exception as inner_e:
-                print(f"一時ディレクトリへの保存も失敗: {inner_e}")
+                print(f"永続ディレクトリへの保存も失敗: {inner_e}")
         
         return None
 
@@ -247,7 +253,7 @@ def save_scraping_state(state):
             print(f"ディレクトリ作成エラー: {dir_error}")
             # Render環境では代替のパスを使用
             if IS_RENDER:
-                alt_path = Path('/tmp/scraping_state.json')
+                alt_path = Path('/opt/render/project/src/scraping_state.json')
                 with open(alt_path, 'w', encoding='utf-8') as f:
                     json.dump(state, f, ensure_ascii=False, indent=2)
                 print(f"代替パスに状態を保存: {alt_path}")
@@ -271,7 +277,7 @@ def save_scraping_state(state):
         # Render環境では代替のパスを使用
         if IS_RENDER:
             try:
-                alt_path = Path('/tmp/scraping_state.json')
+                alt_path = Path('/opt/render/project/src/scraping_state.json')
                 with open(alt_path, 'w', encoding='utf-8') as f:
                     json.dump(state, f, ensure_ascii=False, indent=2)
                 print(f"代替パスに状態を保存: {alt_path}")

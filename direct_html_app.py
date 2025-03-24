@@ -803,10 +803,10 @@ async def github_action_scraping():
         # データベースへの接続とデータベースディレクトリの確認
         try:
             if IS_RENDER:
-                data_dir = Path('/tmp')
+                data_dir = Path('/opt/render/project/src/data')
                 if not data_dir.exists():
                     data_dir.mkdir(exist_ok=True)
-                    print(f"Render環境で一時データディレクトリを作成しました: {data_dir}")
+                    print(f"Render環境で永続データディレクトリを作成しました: {data_dir}")
             
             db = get_db()
             db.execute("SELECT COUNT(*) FROM sqlite_master")  # 接続テスト
