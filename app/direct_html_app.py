@@ -177,6 +177,14 @@ async def startup_event():
                 print(f"Render環境で永続データディレクトリを作成しました: {data_dir}")
             else:
                 print(f"Render環境で永続データディレクトリを確認しました: {data_dir}")
+            
+            # スクレイピングディレクトリも作成
+            scraping_dir = data_dir / 'scraping'
+            if not scraping_dir.exists():
+                scraping_dir.mkdir(exist_ok=True)
+                print(f"スクレイピングディレクトリを作成しました: {scraping_dir}")
+            else:
+                print(f"スクレイピングディレクトリを確認しました: {scraping_dir}")
                 
             # データディレクトリ内のファイルを確認
             files = list(data_dir.glob('*'))
@@ -190,6 +198,12 @@ async def startup_event():
         if not data_dir.exists():
             data_dir.mkdir(exist_ok=True)
             print(f"開発環境でデータディレクトリを作成しました: {data_dir}")
+            
+        # スクレイピングディレクトリも作成
+        scraping_dir = data_dir / 'scraping'
+        if not scraping_dir.exists():
+            scraping_dir.mkdir(exist_ok=True)
+            print(f"開発環境でスクレイピングディレクトリを作成しました: {scraping_dir}")
     
     # データベース接続を確認
     db_path = os.path.join(data_dir, "sauna_temp.db")
