@@ -73,10 +73,10 @@ async def init_db(conn=None):
             conn.commit()
             print("データベースを初期化しました")
             print(f"データベースパス: {DATABASE_PATH.absolute()}")
-            return True
+            return True  # 初期化が実行された
         else:
             print("データベースは既に存在します。初期化はスキップします。")
-            return True
+            return False  # 初期化はスキップされた
     except Exception as e:
         print(f"データベース初期化中にエラー発生: {str(e)}")
         print(traceback.format_exc())

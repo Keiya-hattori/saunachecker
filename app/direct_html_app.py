@@ -242,5 +242,35 @@ async def startup_event():
     # 初期化完了ログ
     print("Application startup completed")
 
+@app.get("/json_ranking", response_class=HTMLResponse)
+async def json_ranking(request: Request):
+    """サウナランキングを表示"""
+    try:
+        # JSONランキングを生成
+        ranking_data = await generate_json_ranking(limit=20)
+        review_count = await get_json_review_count()
+        
+        return templates.TemplateResponse(
+            "ranking.html",
+            {
+                "request": request,
+                "ranking_data": ranking_data,
+                "review_count": review_count
+            }
+        )
+    except Exception as e:
+        print(f"ランキング生成中にエラー発生: {str(e)}")
+        print(traceback.format_exc())
+        return f"""
+        <html>
+            <head><title>エラー</title></head>
+            <body>
+                <h1>ランキングの取得中にエラーが発生しました</h1>
+                <p>{str(e)}</p>
+                <p><a href="/">ホームに戻る</a></p>
+            </body>
+        </html>
+        """
+
 if __name__ == "__main__":
     uvicorn.run("app.direct_html_app:app", host="0.0.0.0", port=8000, reload=True) 

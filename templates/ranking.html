@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>サウナ穴場度ランキング</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">サウナ穴場度ランキング</h1>
+            <p class="text-gray-600">評価レビュー総数: {{ review_count }}件</p>
+            <div class="mt-4">
+                <a href="/" class="text-blue-500 hover:text-blue-700 underline">ホームに戻る →</a>
+            </div>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            {% if ranking_data %}
+                <h2 class="text-xl font-bold mb-4">レビュー数ランキング</h2>
+                <ul class="divide-y divide-gray-200">
+                    {% for item in ranking_data %}
+                        <li class="py-4">
+                            <div class="flex justify-between">
+                                <div>
+                                    <span class="text-2xl font-bold mr-3">{{ loop.index }}</span>
+                                    <span class="font-medium text-lg">{{ item.name }}</span>
+                                </div>
+                                <div class="text-gray-600">
+                                    レビュー: {{ item.review_count }}件
+                                </div>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-center text-gray-600">ランキングデータがありません</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
