@@ -12,9 +12,9 @@ import asyncio
 
 from app.models.database import get_db, init_db
 from app.database import save_reviews, update_ratings
-from app.tasks import toggle_auto_scraping, periodic_scraping, reset_scraping_state, load_scraping_state
-from app.services.scraper import SaunaScraper
 from app.services.ranking import generate_sauna_ranking as generate_json_ranking, get_review_count as get_json_review_count
+from app.services.scraper import SaunaScraper
+from app.tasks import periodic_scraping, toggle_auto_scraping, reset_scraping_state, load_scraping_state
 
 # 環境変数
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
@@ -72,15 +72,6 @@ async def analyze(url: str = Form(...)):
     except Exception as e:
         return {"error": f"エラーが発生しました: {str(e)}"}
 
-@app.get("/api/hidden_gem_reviews")
-async def get_hidden_gem_reviews():
-    """最新の穴場レビューを取得するエンドポイント"""
-    try:
-        reviews = await scraper.get_hidden_gem_reviews_test()
-        return {"hidden_gem_reviews": reviews[:5]}  # 最新5件のみ返す
-    except Exception as e:
-        return {"error": str(e), "hidden_gem_reviews": []}
-
 @app.post("/start_scraping")
 async def start_scraping(background_tasks: BackgroundTasks):
     """スクレイピングを開始するエンドポイント"""
@@ -95,10 +86,27 @@ async def start_scraping(background_tasks: BackgroundTasks):
 async def toggle_auto_scrape():
     """自動スクレイピングの有効/無効を切り替えるエンドポイント"""
     try:
-        result = toggle_auto_scraping()
+        result = await toggle_auto_scraping()
         return result
     except Exception as e:
         return {"status": "error", "message": f"自動スクレイピング設定の変更中にエラーが発生しました: {str(e)}"}
+
+@app.get("/api/scraping_status")
+async def get_scraping_status():
+    """スクレイピングの状態を取得するエンドポイント"""
+    try:
+        from app.tasks import scraping_state, load_scraping_state
+        load_scraping_state()
+        
+        return JSONResponse(content={
+            "status": "success",
+            "data": scraping_state
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"スクレイピング状態の取得に失敗しました: {str(e)}"}
+        )
 
 @app.get("/debug", response_class=JSONResponse)
 async def debug_info():
@@ -166,6 +174,18 @@ async def home():
     </body>
     </html>
     """
+
+@app.get("/api/github-action-scraping")
+async def github_action_scraping():
+    """GitHub Actions からの定期スクレイピング用エンドポイント"""
+    try:
+        print("GitHub Actionsからのスクレイピング要求を受信しました")
+        result = await periodic_scraping()
+        return {"status": "success", "message": "スクレイピングが完了しました", "details": result}
+    except Exception as e:
+        print(f"GitHub Actionsスクレイピングエラー: {str(e)}")
+        print(traceback.format_exc())
+        return {"status": "error", "message": f"スクレイピング中にエラーが発生しました: {str(e)}"}
 
 @app.on_event("startup")
 async def startup_event():
