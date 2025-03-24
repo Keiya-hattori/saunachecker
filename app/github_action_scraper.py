@@ -1,28 +1,35 @@
 import os
+import sys
 import json
+import time
 import asyncio
 from datetime import datetime, timedelta
 import traceback
+from pathlib import Path
 
 # サウナスクレイパーと関連モジュールをインポート
-from scraper import SaunaScraper
-from database import save_reviews
+from app.services.scraper import SaunaScraper
+from app.database import save_reviews
 
-def main():
-    """GitHub Actionsから実行されるメイン関数"""
-    
-    # 永続データディレクトリの設定
-    data_dir = "/opt/render/project/src/data"
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir, exist_ok=True)
-        print(f"Created persistent data directory: {data_dir}")
+# データディレクトリの設定
+IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
+
+if IS_RENDER:
+    DATA_DIR = Path('/opt/render/project/src/data')
+    DATA_DIR.mkdir(exist_ok=True)
+else:
+    DATA_DIR = Path('data')
+    DATA_DIR.mkdir(exist_ok=True)
+
+async def main_async():
+    """非同期メイン関数"""
     
     print(f"GitHub Actions scraper starting at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     try:
         # スクレイピング状態を読み込む
         try:
-            state_file_path = os.path.join(data_dir, "scraping_state.json")
+            state_file_path = DATA_DIR / "scraping_state.json"
             if os.path.exists(state_file_path):
                 with open(state_file_path, 'r', encoding='utf-8') as f:
                     scraping_state = json.load(f)
@@ -73,11 +80,11 @@ def main():
         print(f"Scraping pages {start_page} to {end_page}")
         
         # スクレイピングを実行
-        results = asyncio.run(scraper.scrape_sauna_reviews(start_page, end_page))
+        results = await scraper.scrape_sauna_reviews(start_page, end_page)
         
-        # レビューを保存
+        # レビューを保存（非同期関数）
         print(f"Scraped {len(results)} reviews")
-        saved_count = save_reviews(results)
+        saved_count = await save_reviews(results)
         print(f"Saved {saved_count} reviews to database")
         
         # 状態を更新
@@ -103,6 +110,10 @@ def main():
             save_state(scraping_state, state_file_path)
         
         print("GitHub Actions scraper failed")
+
+def main():
+    """GitHub Actionsから実行されるメイン関数"""
+    asyncio.run(main_async())
 
 def save_state(state, filepath):
     """スクレイピング状態を保存する"""

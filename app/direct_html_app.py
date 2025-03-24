@@ -9,10 +9,10 @@ from datetime import datetime
 from pathlib import Path
 import uvicorn
 
-from database import get_db, save_reviews, update_ratings
-from tasks import toggle_auto_scraping, periodic_scraping, reset_scraping_state, load_scraping_state
-from scraper import SaunaScraper, transform_reviews
-from app.models.database import init_db
+from app.models.database import get_db, init_db
+from app.database import save_reviews, update_ratings
+from app.tasks import toggle_auto_scraping, periodic_scraping, reset_scraping_state, load_scraping_state
+from app.services.scraper import SaunaScraper, transform_reviews
 from app.services.ranking import generate_sauna_ranking as generate_json_ranking, get_review_count as get_json_review_count
 
 # 環境変数
@@ -35,7 +35,7 @@ scraper = SaunaScraper()
 async def startup_event():
     """アプリケーション起動時の初期化イベント"""
     
-    # Render環境の確認と永続データディレクトリの初期化
+    # データディレクトリの設定
     if IS_RENDER:
         data_dir = Path('/opt/render/project/src/data')
         try:
@@ -51,6 +51,12 @@ async def startup_event():
         except Exception as e:
             print(f"Render環境での永続データディレクトリの初期化エラー: {e}")
             print(traceback.format_exc())
+    else:
+        # 開発環境での設定
+        data_dir = Path('data')
+        if not data_dir.exists():
+            data_dir.mkdir(exist_ok=True)
+            print(f"開発環境でデータディレクトリを作成しました: {data_dir}")
     
     # データベース接続を確認
     db_path = os.path.join(data_dir, "sauna_temp.db")

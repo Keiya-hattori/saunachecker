@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from app.services.scraper import SaunaScraper
 from app.models.database import get_sauna_ranking, get_review_count, get_db, save_review, init_db
+from app.database import save_reviews
 
 from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -179,8 +180,8 @@ async def periodic_scraping(background_tasks=None):
         # スクレイピングを実行
         results = await scraper.scrape_sauna_reviews(start_page, end_page)
         
-        # 結果を保存
-        num_saved = save_reviews(results)
+        # 結果を保存（非同期関数）
+        num_saved = await save_reviews(results)
         
         # スクレイピング状態を更新
         scraping_state["is_running"] = False
