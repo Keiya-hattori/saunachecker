@@ -10,21 +10,25 @@ IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # データベースディレクトリの設定
 if IS_RENDER:
-    # Render環境ではプロジェクトディレクトリ内にデータベースを一時的に保存
-    # フリープランでは永続ディレクトリは使用しない
-    DATA_DIR = Path('/opt/render/project/src')
-    print(f"Render環境でのデータディレクトリ: {DATA_DIR}")
+    # Render環境では永続的なデータディレクトリを使用
+    DATA_DIR = Path('/opt/render/project/src/data')
+    # ディレクトリが存在しない場合は作成
+    DATA_DIR.mkdir(exist_ok=True)
+    print(f"Render環境での永続データディレクトリ: {DATA_DIR}")
     
     DATABASE_PATH = DATA_DIR / 'sauna_temp.db'
-    print(f"Render環境での一時データベースパス: {DATABASE_PATH.absolute()}")
+    print(f"Render環境での永続データベースパス: {DATABASE_PATH.absolute()}")
 else:
     # ローカル環境ではプロジェクトディレクトリにデータベースを保存
-    DATABASE_PATH = Path('sauna.db')
+    DATABASE_PATH = Path('sauna_temp.db')
     print(f"ローカル環境でのデータベースパス: {DATABASE_PATH.absolute()}")
 
 def get_db():
     """データベース接続を取得"""
     try:
+        # データベースディレクトリが存在することを確認
+        DATABASE_PATH.parent.mkdir(exist_ok=True)
+        
         conn = sqlite3.connect(DATABASE_PATH)
         conn.row_factory = sqlite3.Row  # 辞書形式で結果を取得
         return conn

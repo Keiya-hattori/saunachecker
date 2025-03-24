@@ -38,194 +38,226 @@ scraping_state = {
     "total_pages_scraped": 0,  # スクレイピングした総ページ数
     "last_run": None,  # 最後に実行した時刻
     "is_running": False,  # 現在実行中かどうか
-    "auto_scraping_enabled": False  # 自動スクレイピングが有効かどうか
+    "auto_scraping_enabled": False,  # 自動スクレイピングが有効かどうか
+    "next_scraping": None  # 次回スクレイピングの予定時刻
 }
 
 def load_scraping_state():
-    """スクレイピング状態をファイルから読み込む"""
+    """スクレイピング状態を読み込む"""
     global scraping_state
+    
     try:
-        if SCRAPING_STATE_FILE.exists():
-            print(f"スクレイピング状態ファイルをロード中: {SCRAPING_STATE_FILE}")
-            with open(SCRAPING_STATE_FILE, 'r', encoding='utf-8') as f:
-                loaded_state = json.load(f)
-                # 必要なキーが全て含まれているか確認
-                required_keys = ["last_page", "total_pages_scraped", "auto_scraping_enabled"]
-                if all(key in loaded_state for key in required_keys):
-                    # 実行中状態はリセット
-                    loaded_state["is_running"] = False
-                    # 時刻関連の情報は現在の状態を維持
-                    loaded_state["last_scraping"] = scraping_state.get("last_scraping")
-                    loaded_state["next_scraping"] = scraping_state.get("next_scraping")
-                    scraping_state.update(loaded_state)
-                    print(f"スクレイピング状態を読み込みました: 最終ページ {scraping_state['last_page']}")
-                else:
-                    print("状態ファイルのフォーマットが不正です。デフォルト値を使用します。")
-                    # 初期状態を保存
-                    save_scraping_state()
+        # スクレイピング状態ファイルのパスを決定
+        if IS_RENDER:
+            # Render環境では永続的なデータディレクトリを使用
+            data_dir = "/opt/render/project/src/data"
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+                print(f"Created persistent data directory for state: {data_dir}")
+            
+            state_file_path = os.path.join(data_dir, "scraping_state.json")
         else:
-            print(f"スクレイピング状態ファイルが見つかりません: {SCRAPING_STATE_FILE}")
-            print("初期状態を使用します。")
+            # ローカル環境では現在の作業ディレクトリを使用
+            state_file_path = "scraping_state.json"
+        
+        # ファイルが存在するか確認
+        if os.path.exists(state_file_path):
+            with open(state_file_path, 'r', encoding='utf-8') as f:
+                loaded_state = json.load(f)
+                scraping_state.update(loaded_state)
+                
+            # 古いキー名を新しいキー名に変換（互換性のため）
+            if "last_page" in scraping_state and "last_scraped_page" not in scraping_state:
+                scraping_state["last_scraped_page"] = scraping_state.pop("last_page")
+                
+            if "total_pages_scraped" in scraping_state and "total_scraped_pages" not in scraping_state:
+                scraping_state["total_scraped_pages"] = scraping_state.pop("total_pages_scraped")
+                
+            print(f"スクレイピング状態を読み込みました: {state_file_path}")
+        else:
+            # ファイルが存在しない場合はデフォルト状態を設定
+            scraping_state = {
+                "last_scraped_page": 0,
+                "total_scraped_pages": 0,
+                "is_running": False,
+                "auto_scraping_enabled": True,  # GitHub Actionsは15分毎に実行
+                "last_run": "",
+                "next_scraping": (datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')
+            }
+            print(f"スクレイピング状態ファイルが見つからないため、デフォルト状態を使用します")
+            
+            # デフォルト状態を保存
             save_scraping_state()
+    
     except Exception as e:
-        print(f"状態ファイルの読み込みエラー: {e}")
+        print(f"スクレイピング状態の読み込みに失敗しました: {str(e)}")
         print(traceback.format_exc())
-        print("エラーにより初期状態を使用します。")
-        save_scraping_state()
+        
+        # エラー時はデフォルト状態を設定
+        scraping_state = {
+            "last_scraped_page": 0,
+            "total_scraped_pages": 0,
+            "is_running": False,
+            "auto_scraping_enabled": True,  # GitHub Actionsは15分毎に実行
+            "last_run": "",
+            "next_scraping": (datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 def save_scraping_state():
-    """スクレイピング状態をファイルに保存する"""
+    """スクレイピング状態を保存する"""
+    global scraping_state
+    
     try:
-        # Render環境では/dataディレクトリを確認
+        # スクレイピング状態ファイルのパスを決定
         if IS_RENDER:
-            if not DATA_DIR.exists():
-                DATA_DIR.mkdir(exist_ok=True)
-                print(f"Render環境でデータディレクトリを作成しました：{DATA_DIR}")
+            # Render環境では永続的なデータディレクトリを使用
+            data_dir = "/opt/render/project/src/data"
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+                print(f"Created persistent data directory for state: {data_dir}")
+            
+            state_file_path = os.path.join(data_dir, "scraping_state.json")
+        else:
+            # ローカル環境では現在の作業ディレクトリを使用
+            state_file_path = "scraping_state.json"
         
-        # ディレクトリが確実に存在することを確認
-        SCRAPING_STATE_FILE.parent.mkdir(exist_ok=True)
-        
-        with open(SCRAPING_STATE_FILE, 'w', encoding='utf-8') as f:
+        # 状態をJSONファイルとして保存
+        with open(state_file_path, 'w', encoding='utf-8') as f:
             json.dump(scraping_state, f, ensure_ascii=False, indent=2)
-        print(f"スクレイピング状態を保存しました: 最終ページ {scraping_state['last_page']}")
-        print(f"保存先: {SCRAPING_STATE_FILE}")
+            
+        print(f"スクレイピング状態を保存しました: {state_file_path}")
+    
     except Exception as e:
-        print(f"状態ファイルの保存エラー: {e}")
+        print(f"スクレイピング状態の保存に失敗しました: {str(e)}")
         print(traceback.format_exc())
 
-async def periodic_scraping():
-    """30分ごとに自動的にスクレイピングを実行するバックグラウンドタスク"""
-    global last_scraping_time, scraping_state
+async def periodic_scraping(background_tasks=None):
+    """周期的スクレイピング処理
     
-    # 起動時にデータベースの状態を確認
+    Note: この関数はUIからの手動スクレイピングと、GitHub Actionsからの呼び出しの両方に対応
+    """
+    global scraping_state
+    
     try:
-        if IS_RENDER:
-            # Render環境では書き込み可能な一時ディレクトリを使用
-            data_dir = Path('/tmp')
-            if not data_dir.exists():
-                data_dir.mkdir(exist_ok=True)
-                print(f"バックグラウンドタスク: 一時データディレクトリを作成しました: {data_dir}")
-            
-            # データディレクトリ内のファイルを確認
-            files = list(data_dir.glob('*'))
-            print(f"バックグラウンドタスク: データディレクトリ内のファイル: {[f.name for f in files]}")
-            
-        # データベース接続テスト
-        db = get_db()
-        db.execute("SELECT COUNT(*) FROM sqlite_master")
-        print("バックグラウンドタスク: データベース接続テスト成功")
-    except Exception as e:
-        print(f"バックグラウンドタスク: データベース初期化エラー: {e}")
-        print(traceback.format_exc())
-    
-    # 起動時にスクレイピング状態を読み込む
-    try:
-        load_scraping_state()
-        print(f"バックグラウンドタスク: スクレイピング状態を読み込みました")
-        print(f"最終ページ: {scraping_state['last_page']}, 総スクレイピングページ数: {scraping_state['total_pages_scraped']}")
-    except Exception as e:
-        print(f"バックグラウンドタスク: スクレイピング状態の読み込みエラー: {e}")
-        print(traceback.format_exc())
-    
-    print(f"バックグラウンドスクレイピングタスクを開始しました。30分ごとに実行します。")
-    print(f"自動スクレイピング有効: {scraping_state['auto_scraping_enabled']}")
-    
-    # 自動スクレイピングが無効になっている場合は待機するだけ
-    if not scraping_state['auto_scraping_enabled']:
-        print("自動スクレイピングは無効になっています。手動で有効化するまで待機します。")
-        while not scraping_state['auto_scraping_enabled']:
-            await asyncio.sleep(60)  # 1分ごとに設定を確認
+        # データベース接続を確認
+        data_dir = "/opt/render/project/src/data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
+            print(f"Created persistent data directory: {data_dir}")
         
-    while True:
-        try:
-            # 自動スクレイピングが無効になっていたら待機
-            if not scraping_state['auto_scraping_enabled']:
-                print("自動スクレイピングは無効になっています。手動で有効化するまで待機します。")
-                while not scraping_state['auto_scraping_enabled']:
-                    await asyncio.sleep(60)  # 1分ごとに設定を確認
-                continue
-
-            # 現在時刻を取得
-            now = datetime.now()
+        db_path = os.path.join(data_dir, "sauna_temp.db")
+        print(f"Using database at: {db_path}")
+        
+        # スクレイピング状態を読み込む
+        load_scraping_state()
+        
+        # 既に実行中の場合は何もしない
+        if scraping_state.get("is_running", False):
+            message = "スクレイピングは既に実行中です。"
+            print(message)
             
-            # データベース接続を再確認
-            try:
-                db = get_db()
-                db.execute("SELECT COUNT(*) FROM sqlite_master")
-                print("スクレイピング前のデータベース接続テスト: 成功")
-            except Exception as e:
-                print(f"スクレイピング前のデータベース接続エラー: {e}")
-                print(traceback.format_exc())
-                await asyncio.sleep(300)  # 5分待機して再試行
-                continue
-            
-            # スクレイピングの実行
-            print(f"自動スクレイピング開始: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # 今回スクレイピングするページ範囲を決定
-            start_page = scraping_state['last_page'] + 1
-            end_page = start_page + 2  # 3ページずつスクレイピング
-            
-            # ページ範囲が1から始まるようにする
-            if start_page <= 0:
-                start_page = 1
-                end_page = 3
-            
-            print(f"スクレイピング範囲: {start_page}〜{end_page}ページ")
-            
-            # ページ範囲を指定して実サイトからのスクレイピングを実行
-            scraping_state['is_running'] = True
-            save_scraping_state()
-            
-            # スクレイピング実行
-            start_time = datetime.now()
-            reviews = await scraper.get_hidden_gem_reviews(
-                max_pages=3,
-                start_page=start_page,
-                end_page=end_page
+            # APIからの呼び出しの場合はJSONResponseを返す
+            if background_tasks is not None:
+                return JSONResponse(
+                    content={"status": "info", "message": message}
+                )
+            return {"message": message, "status": "info"}
+        
+        # 実行中フラグを設定
+        scraping_state["is_running"] = True
+        save_scraping_state()
+        
+        print("スクレイピングを開始します...")
+        
+        # スクレイパーを初期化
+        scraper = SaunaScraper()
+        
+        # 開始ページと終了ページを決定
+        start_page = int(scraping_state.get("last_scraped_page", 0)) + 1
+        end_page = start_page + 3  # 1回の実行で3ページをスクレイピング
+        
+        # スクレイピングを実行
+        results = await scraper.scrape_sauna_reviews(start_page, end_page)
+        
+        # 結果を保存
+        num_saved = save_reviews(results)
+        
+        # スクレイピング状態を更新
+        scraping_state["is_running"] = False
+        scraping_state["last_scraped_page"] = end_page
+        scraping_state["total_scraped_pages"] += (end_page - start_page + 1)
+        scraping_state["last_run"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 次回のスクレイピング時刻を15分後に設定（GitHub Actionsのスケジュールに合わせる）
+        next_run_time = datetime.now() + timedelta(minutes=15)
+        scraping_state["next_scraping"] = next_run_time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        save_scraping_state()
+        
+        # 結果メッセージを作成
+        message = f"スクレイピングが完了しました。ページ {start_page} から {end_page} まで処理し、{num_saved} 件のレビューを保存しました。"
+        print(message)
+        
+        # APIからの呼び出しの場合はJSONResponseを返す
+        if background_tasks is not None:
+            return JSONResponse(
+                content={
+                    "status": "success", 
+                    "message": message,
+                    "data": {
+                        "start_page": start_page,
+                        "end_page": end_page,
+                        "reviews_saved": num_saved,
+                        "next_scraping": scraping_state["next_scraping"]
+                    }
+                }
             )
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            
-            # スクレイピング状態を更新
-            scraping_state['last_page'] = end_page
-            scraping_state['last_run'] = now.strftime('%Y-%m-%d %H:%M:%S')
-            scraping_state['total_pages_scraped'] += (end_page - start_page + 1)
-            scraping_state['is_running'] = False
-            save_scraping_state()
-            
-            # 結果の取得と記録
-            try:
-                ranking = await get_sauna_ranking(limit=20)
-                total_reviews = await get_review_count()
-                
-                # 前回からの新規レビュー数を計算
-                new_reviews_count = len(reviews)
-                
-                # 最終スクレイピング時刻を更新
-                last_scraping_time = now
-                
-                print(f"自動スクレイピング完了: {new_reviews_count}件のレビューを取得しました（処理時間: {duration:.2f}秒）")
-                print(f"ランキング更新: 総レビュー数 {total_reviews}件、総サウナ数 {len(ranking)}件")
-                print(f"次回のスクレイピングは15分後です（{start_page + 3}〜{end_page + 3}ページ）")
-            except Exception as e:
-                print(f"スクレイピング後のデータ取得エラー: {e}")
-                print(traceback.format_exc())
-            
-            # 15分間待機
-            await asyncio.sleep(15 * 60)  # 15分 = 900秒
-            
-        except Exception as e:
-            print(f"自動スクレイピング中にエラー発生: {str(e)}")
-            print(traceback.format_exc())
-            
-            # エラー発生時にスクレイピング状態を更新
-            scraping_state['is_running'] = False
-            save_scraping_state()
-            
-            # エラー時は5分後に再試行
-            print(f"5分後に再試行します")
-            await asyncio.sleep(5 * 60)  # 5分 = 300秒
+        
+        # 通常の呼び出しの場合は辞書を返す
+        return {
+            "message": message,
+            "start_page": start_page,
+            "end_page": end_page,
+            "reviews_saved": num_saved,
+            "next_scraping": scraping_state["next_scraping"]
+        }
+        
+    except Exception as e:
+        # エラー発生時
+        print(f"スクレイピングエラー: {str(e)}")
+        print(traceback.format_exc())
+        
+        # スクレイピング状態をリセット
+        scraping_state["is_running"] = False
+        save_scraping_state()
+        
+        # APIからの呼び出しの場合はJSONResponseでエラーを返す
+        if background_tasks is not None:
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"スクレイピングに失敗しました: {str(e)}"}
+            )
+        
+        # 通常の呼び出しの場合は辞書でエラーを返す
+        return {
+            "message": f"エラー: {str(e)}",
+            "error": True
+        }
+
+# 起動時に状態を読み込む
+load_scraping_state()
+
+# スクレイピングタスクを開始する関数
+async def start_periodic_scraping():
+    """単発のスクレイピングタスクを実行する"""
+    # 実行中の場合は何もしない
+    if scraping_state["is_running"]:
+        print("スクレイピングは既に実行中です。")
+        return
+
+    # 単発実行
+    print("スクレイピングタスクを実行します。")
+    await periodic_scraping()
 
 async def get_last_scraping_info():
     """最後のスクレイピング情報を取得する関数"""
@@ -264,132 +296,128 @@ async def get_last_scraping_info():
             "is_running": scraping_state["is_running"]
         }
 
-async def toggle_auto_scraping(enable=None):
-    """自動スクレイピングの有効/無効を切り替える"""
+async def toggle_auto_scraping(enable=None, background_tasks=None):
+    """自動スクレイピングの有効/無効を切り替える
+    
+    Note: この機能はGitHub Actionsによる自動スクレイピングに置き換えられていますが、
+    UIとの互換性のために残しています。実際にはGitHub Actionsのスケジュール実行が使用されます。
+    """
     global scraping_state
-    
-    # 現在のスクレイピング状態を読み込む
-    load_scraping_state()
-    
-    if enable is not None:
-        scraping_state["auto_scraping_enabled"] = enable
-    else:
-        # 指定がなければ現在の状態を反転
-        scraping_state["auto_scraping_enabled"] = not scraping_state["auto_scraping_enabled"]
-    
-    save_scraping_state()
-    
-    return {
-        "auto_scraping_enabled": scraping_state["auto_scraping_enabled"],
-        "message": f"自動スクレイピングを{'有効' if scraping_state['auto_scraping_enabled'] else '無効'}にしました"
-    }
-
-async def reset_scraping_state():
-    """スクレイピング状態をリセットする"""
-    global scraping_state
-    
-    scraping_state = {
-        "last_page": 0,
-        "last_run": None,
-        "total_pages_scraped": 0,
-        "is_running": False,
-        "auto_scraping_enabled": False
-    }
-    
-    save_scraping_state()
-    
-    return {
-        "message": "スクレイピング状態をリセットしました",
-        "state": scraping_state
-    }
-
-# 起動時に状態を読み込む
-load_scraping_state()
-
-# 周期的なスクレイピングタスクを開始する背景タスク
-async def start_periodic_scraping():
-    # 自動スクレイピングが無効の場合は何もしない
-    if not scraping_state["auto_scraping_enabled"]:
-        print("自動スクレイピングは無効化されています。")
-        return
-
-    # 初回実行は即時
-    asyncio.create_task(periodic_scraping())
-    
-    # 30分ごとに実行するループ
-    while True:
-        # 次回実行時刻を30分後に設定
-        now = datetime.now()
-        next_run = now + timedelta(minutes=30)
-        scraping_state["next_scraping"] = next_run.strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 30分待機
-        print(f"次回スクレイピングは {scraping_state['next_scraping']} に実行予定です")
-        await asyncio.sleep(30 * 60)  # 30分 = 1800秒
-        
-        # 自動スクレイピングが無効になっていたら終了
-        if not scraping_state["auto_scraping_enabled"]:
-            print("自動スクレイピングが無効化されたため、定期実行を停止します。")
-            break
-            
-        # スクレイピング実行
-        asyncio.create_task(periodic_scraping())
-
-# 実際のスクレイピングを行う関数
-async def periodic_scraping():
-    global scraping_state
-    
-    if scraping_state["is_running"]:
-        print("スクレイピングは既に実行中です")
-        return
     
     try:
-        scraping_state["is_running"] = True
-        print("定期的なスクレイピングを開始します...")
+        # 現在のスクレイピング状態を読み込む
+        load_scraping_state()
         
-        # 現在の時刻を記録
-        now = datetime.now()
-        scraping_state["last_scraping"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        if enable is not None:
+            scraping_state["auto_scraping_enabled"] = enable
+        else:
+            # 指定がなければ現在の状態を反転
+            scraping_state["auto_scraping_enabled"] = not scraping_state["auto_scraping_enabled"]
         
-        # スクレイピングの開始ページと終了ページを決定
-        start_page = scraping_state["last_page"] + 1
-        end_page = start_page + 2  # 3ページずつスクレイピング
+        # 有効にした場合は次回実行時刻を設定
+        if scraping_state["auto_scraping_enabled"]:
+            next_run_time = datetime.now() + timedelta(minutes=15)
+            scraping_state["next_scraping"] = next_run_time.strftime('%Y-%m-%d %H:%M:%S')
         
-        print(f"{start_page}ページから{end_page}ページまでスクレイピングします...")
+        save_scraping_state()
         
-        # スクレイピング実行
-        scraper = SaunaScraper()
-        reviews = await scraper.get_hidden_gem_reviews(start_page=start_page, end_page=end_page)
+        message = f"自動スクレイピングを{'有効' if scraping_state['auto_scraping_enabled'] else '無効'}にしました（GitHub Actionsで15分ごとに実行）"
         
-        # DB初期化（必要であれば）
-        db_conn = get_db()
-        init_db(db_conn)
+        # APIからの呼び出しの場合はJSONResponseを返す
+        if background_tasks is not None:
+            return JSONResponse(content={
+                "status": "success",
+                "data": {
+                    "enabled": scraping_state["auto_scraping_enabled"],
+                    "message": message,
+                    "next_scraping": scraping_state.get("next_scraping", "未定")
+                }
+            })
         
-        # レビューを保存
-        review_count = 0
-        for review in reviews:
-            success = save_review(
-                db_conn,
-                review["sauna_name"],
-                review["review_text"],
-                review["sauna_url"]
+        # 通常の呼び出しの場合は辞書を返す
+        return {
+            "auto_scraping_enabled": scraping_state["auto_scraping_enabled"],
+            "message": message,
+            "next_scraping": scraping_state.get("next_scraping", "未定")
+        }
+    except Exception as e:
+        # エラー発生時
+        print(f"自動スクレイピング設定エラー: {str(e)}")
+        print(traceback.format_exc())
+        
+        # APIからの呼び出しの場合はJSONResponseでエラーを返す
+        if background_tasks is not None:
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"設定の変更に失敗しました: {str(e)}"}
             )
-            if success:
-                review_count += 1
         
-        print(f"{review_count}件のレビューを保存しました")
-        
-        # 状態を更新
-        scraping_state["last_page"] = end_page
-        scraping_state["total_pages_scraped"] += (end_page - start_page + 1)
+        # 通常の呼び出しの場合は辞書でエラーを返す
+        return {
+            "auto_scraping_enabled": False,
+            "message": f"エラー: {str(e)}",
+            "error": True
+        }
+
+async def reset_scraping_state(background_tasks=None):
+    """スクレイピング状態をリセットする
+    
+    Note: この関数はUIからのリセット操作とGitHub Actionsとの連携の両方に対応
+    """
+    global scraping_state
+    
+    try:
+        # 初期状態を設定
+        scraping_state = {
+            "last_scraped_page": 0,
+            "total_scraped_pages": 0,
+            "is_running": False,
+            "auto_scraping_enabled": True,  # GitHub Actionsは15分毎に実行
+            "last_run": "",
+            "next_scraping": (datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')
+        }
         
         # 状態を保存
         save_scraping_state()
         
+        message = "スクレイピング状態をリセットしました。次回は最初のページからスクレイピングが開始されます。"
+        print(message)
+        
+        # APIからの呼び出しの場合はJSONResponseを返す
+        if background_tasks is not None:
+            return JSONResponse(
+                content={
+                    "status": "success", 
+                    "message": message,
+                    "data": scraping_state
+                }
+            )
+        
+        # 通常の呼び出しの場合は辞書を返す
+        return {
+            "message": message,
+            "status": "success",
+            "data": scraping_state
+        }
+    
     except Exception as e:
-        print(f"スクレイピング中にエラーが発生しました: {e}")
-    finally:
-        scraping_state["is_running"] = False
+        # エラー発生時
+        error_message = f"スクレイピング状態のリセットに失敗しました: {str(e)}"
+        print(error_message)
+        print(traceback.format_exc())
+        
+        # APIからの呼び出しの場合はJSONResponseでエラーを返す
+        if background_tasks is not None:
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": error_message}
+            )
+        
+        # 通常の呼び出しの場合は辞書でエラーを返す
+        return {
+            "message": error_message,
+            "status": "error"
+        }
 
 # スクレイピング状態を取得するAPI
 async def get_scraping_status():
@@ -443,59 +471,4 @@ async def get_scraping_status():
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": f"スクレイピング状態の取得に失敗しました: {str(e)}"}
-        )
-
-# 自動スクレイピングの有効/無効を切り替えるAPI
-async def toggle_auto_scraping(enable: bool, background_tasks: BackgroundTasks):
-    global scraping_state
-    
-    try:
-        # 状態を更新
-        scraping_state["auto_scraping_enabled"] = enable
-        
-        # 状態をファイルに保存
-        save_scraping_state()
-        
-        # 有効化された場合、バックグラウンドタスクを開始
-        if enable and not any(task.get_name() == "periodic_scraping" for task in asyncio.all_tasks()):
-            background_tasks.add_task(start_periodic_scraping)
-            message = "自動スクレイピングを有効化しました。30分ごとに実行されます。"
-        else:
-            message = "自動スクレイピングを無効化しました。"
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                "enabled": enable,
-                "message": message
-            }
-        })
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": f"設定の変更に失敗しました: {str(e)}"}
-        )
-
-# スクレイピング状態をリセットするAPI
-async def reset_scraping_state():
-    global scraping_state
-    
-    try:
-        # 状態をリセット
-        scraping_state["last_page"] = 0
-        scraping_state["total_pages_scraped"] = 0
-        
-        # 状態をファイルに保存
-        save_scraping_state()
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                "message": "スクレイピング状態をリセットしました。次回は1ページ目から開始されます。"
-            }
-        })
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": f"状態のリセットに失敗しました: {str(e)}"}
         ) 
