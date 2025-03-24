@@ -150,36 +150,4 @@ async def update_ratings(url, rating_data=None):
         return {
             "success": False, 
             "message": f"評価データの保存に失敗しました: {str(e)}"
-        }
-
-async def update_ratings(ratings_data):
-    """サウナの評価を更新
-
-    Args:
-        ratings_data (dict): 評価データ
-
-    Returns:
-        bool: 更新が成功したかどうか
-    """
-    if not ratings_data:
-        return False
-    
-    conn = get_db()
-    try:
-        cur = conn.cursor()
-        
-        for sauna_id, rating in ratings_data.items():
-            # サウナの評価を更新
-            cur.execute(
-                "UPDATE sauna_stats SET rating = ? WHERE sauna_id = ?",
-                (rating, sauna_id)
-            )
-        
-        conn.commit()
-        return True
-    
-    except Exception as e:
-        print(f"評価更新中にエラー発生: {str(e)}")
-        return False
-    finally:
-        conn.close() 
+        } 

@@ -241,6 +241,30 @@ async def get_review_count(conn=None) -> int:
         if close_conn and conn:
             conn.close()
 
+def count_reviews(conn=None) -> int:
+    """
+    レビューの数を数える同期版関数
+    この関数はget_review_countの同期バージョンとして機能します
+    """
+    close_conn = False
+    try:
+        if conn is None:
+            conn = get_db()
+            close_conn = True
+        
+        cur = conn.cursor()
+        
+        cur.execute("SELECT COUNT(*) FROM reviews")
+        count = cur.fetchone()[0]
+        
+        return count
+    except Exception as e:
+        print(f"レビュー数取得エラー: {str(e)}")
+        return 0
+    finally:
+        if close_conn and conn:
+            conn.close()
+
 async def get_latest_reviews(limit: int = 10, conn=None) -> list:
     """最新のレビューを取得"""
     close_conn = False

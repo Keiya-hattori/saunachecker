@@ -13,7 +13,8 @@ import json
 
 from app.models.database import get_db, init_db, reset_database, count_reviews, save_review
 from app.database import save_reviews, update_ratings
-from app.services.ranking import generate_sauna_ranking as generate_json_ranking, get_review_count as get_json_review_count
+from app.services.ranking import generate_sauna_ranking as generate_json_ranking
+from app.services.ranking import get_review_count as get_json_review_count
 from app.services.scraper import SaunaScraper
 from app.tasks import scraping_state, load_scraping_state, save_scraping_state, reset_scraping_state, periodic_scraping, toggle_auto_scraping, ensure_data_dir
 
@@ -208,7 +209,7 @@ async def github_action_scraping():
 async def reset_db():
     """データベースをリセットする（開発用）"""
     try:
-        reset_database()
+        await reset_database()
         return {"status": "success", "message": "データベースをリセットしました"}
     except Exception as e:
         return {"status": "error", "message": f"データベースリセットエラー: {str(e)}"}
@@ -296,7 +297,7 @@ async def startup_event():
         
         # データベースの初期化
         print("データベース初期化中...")
-        init_db()
+        await init_db()
         
         # 初期化ステータスを表示
         db = get_db()
