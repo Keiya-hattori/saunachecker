@@ -47,31 +47,36 @@ async def init_db(conn=None):
         
         cur = conn.cursor()
         
-        # レビューテーブルの作成
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS reviews (
-            review_id TEXT PRIMARY KEY,
-            sauna_name TEXT,
-            review_text TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        
-        # サウナ統計テーブルの作成
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS sauna_stats (
-            sauna_id TEXT PRIMARY KEY,
-            sauna_name TEXT,
-            review_count INTEGER DEFAULT 0,
-            score REAL DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        
-        conn.commit()
-        print("データベースを初期化しました")
-        print(f"データベースパス: {DATABASE_PATH.absolute()}")
-        return True
+        # データベースが存在しない場合のみ初期化
+        if not DATABASE_PATH.exists():
+            # レビューテーブルの作成
+            cur.execute('''
+            CREATE TABLE IF NOT EXISTS reviews (
+                review_id TEXT PRIMARY KEY,
+                sauna_name TEXT,
+                review_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            
+            # サウナ統計テーブルの作成
+            cur.execute('''
+            CREATE TABLE IF NOT EXISTS sauna_stats (
+                sauna_id TEXT PRIMARY KEY,
+                sauna_name TEXT,
+                review_count INTEGER DEFAULT 0,
+                score REAL DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            
+            conn.commit()
+            print("データベースを初期化しました")
+            print(f"データベースパス: {DATABASE_PATH.absolute()}")
+            return True
+        else:
+            print("データベースは既に存在します。初期化はスキップします。")
+            return True
     except Exception as e:
         print(f"データベース初期化中にエラー発生: {str(e)}")
         print(traceback.format_exc())

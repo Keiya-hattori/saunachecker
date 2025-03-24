@@ -22,8 +22,8 @@ IS_RENDER = os.environ.get('RENDER', 'False') == 'True'
 
 # スクレイピング状態を保存するファイルパス
 if IS_RENDER:
-    # Render環境ではプロジェクトディレクトリに状態ファイルを保存
-    DATA_DIR = Path('/opt/render/project/src')
+    # Render環境では永続的なデータディレクトリを使用
+    DATA_DIR = Path('/opt/render/project/src/data')
     SCRAPING_STATE_FILE = DATA_DIR / 'scraping_state.json'
     print(f"Render環境での状態ファイル: {SCRAPING_STATE_FILE}")
 else:
